@@ -14,6 +14,35 @@ Ground rules for these sessions:
 
 ---
 
+## 2026-08-26 — Iteration 3: TickerSearch behaviour
+
+**Added:** `src/components/TickerSearch.test.tsx` — 13 cases covering debounce
+(a burst of keystrokes makes one request), keyboard navigation including
+wrap-around, Escape, click-to-select, and the fallback that still lets an exact
+ticker through when the search endpoint is down.
+
+The one that matters most: **a slow response for an earlier query must not
+overwrite a newer one**. The component already guards this with a request
+sequence number; there is now a test that fails if that guard is removed.
+
+**Test-harness notes** (no production code changed this iteration):
+
+- Fake timers plus `userEvent` deadlock — 11 of 12 cases timed out on the first
+  attempt. `userEvent` awaits internally on timers the fake clock had frozen.
+  Rewritten to use real timers; the debounce is only 220ms so the whole file
+  still runs in ~5s.
+- Test-level waits are wrapped in `act()` via a `settle()` helper, so the state
+  updates the debounce fires are flushed by React instead of warning. Latency
+  simulated *inside* a mocked request deliberately is not wrapped — that models
+  the network, not a render pass.
+
+**Verified:** frontend 72 passed · backend 75 passed · build clean.
+
+**Notes for the morning:** no production bugs found. The async guards in
+`TickerSearch` were already correct; they are now pinned by tests.
+
+---
+
 ## 2026-08-26 — Iteration 2: test coverage for the untested units
 
 **Added** (59 frontend tests total, up from 19):
