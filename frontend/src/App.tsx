@@ -10,7 +10,10 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Vantage</h1>
+        <div className="brand">
+          <img src="/favicon.svg" alt="" className="brand-mark" />
+          <h1>Vantage</h1>
+        </div>
         <nav>
           <button className={tab === "comparison" ? "active" : ""} onClick={() => setTab("comparison")}>
             Stock Comparison

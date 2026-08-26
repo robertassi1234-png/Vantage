@@ -5,6 +5,7 @@ interface Column {
   key: keyof FundamentalsRow;
   label: string;
   format?: (v: FundamentalsRow[keyof FundamentalsRow]) => string;
+  numeric?: boolean;
 }
 
 const fmtNum = (digits = 2) => (v: unknown) =>
@@ -19,21 +20,21 @@ const fmtBillions = (v: unknown) =>
 const COLUMNS: Column[] = [
   { key: "ticker", label: "Ticker" },
   { key: "companyName", label: "Company" },
-  { key: "price", label: "Price", format: fmtNum(2) },
-  { key: "marketCap", label: "Market Cap", format: fmtBillions },
-  { key: "peRatio", label: "P/E", format: fmtNum(1) },
-  { key: "pegRatio", label: "PEG", format: fmtNum(2) },
-  { key: "evToEbitda", label: "EV/EBITDA", format: fmtNum(1) },
-  { key: "priceToBook", label: "P/B", format: fmtNum(2) },
-  { key: "priceToSales", label: "P/S", format: fmtNum(2) },
-  { key: "debtToEquity", label: "Debt/Equity", format: fmtNum(2) },
-  { key: "currentRatio", label: "Current Ratio", format: fmtNum(2) },
-  { key: "revenueGrowth", label: "Revenue Growth", format: fmtPercent },
-  { key: "epsGrowth", label: "EPS Growth", format: fmtPercent },
-  { key: "netProfitMargin", label: "Net Margin", format: fmtPercent },
-  { key: "operatingMargin", label: "Operating Margin", format: fmtPercent },
-  { key: "returnOnEquity", label: "ROE", format: fmtPercent },
-  { key: "dividendYield", label: "Dividend Yield", format: fmtPercent },
+  { key: "price", label: "Price", format: fmtNum(2), numeric: true },
+  { key: "marketCap", label: "Market Cap", format: fmtBillions, numeric: true },
+  { key: "peRatio", label: "P/E", format: fmtNum(1), numeric: true },
+  { key: "pegRatio", label: "PEG", format: fmtNum(2), numeric: true },
+  { key: "evToEbitda", label: "EV/EBITDA", format: fmtNum(1), numeric: true },
+  { key: "priceToBook", label: "P/B", format: fmtNum(2), numeric: true },
+  { key: "priceToSales", label: "P/S", format: fmtNum(2), numeric: true },
+  { key: "debtToEquity", label: "Debt/Equity", format: fmtNum(2), numeric: true },
+  { key: "currentRatio", label: "Current Ratio", format: fmtNum(2), numeric: true },
+  { key: "revenueGrowth", label: "Revenue Growth", format: fmtPercent, numeric: true },
+  { key: "epsGrowth", label: "EPS Growth", format: fmtPercent, numeric: true },
+  { key: "netProfitMargin", label: "Net Margin", format: fmtPercent, numeric: true },
+  { key: "operatingMargin", label: "Operating Margin", format: fmtPercent, numeric: true },
+  { key: "returnOnEquity", label: "ROE", format: fmtPercent, numeric: true },
+  { key: "dividendYield", label: "Dividend Yield", format: fmtPercent, numeric: true },
 ];
 
 interface Props {
@@ -75,12 +76,17 @@ export function StockTable({ rows, onRemove }: Props) {
   }
 
   return (
-    <div className="table-wrap">
+    <>
+      <div className="table-wrap">
       <table>
         <thead>
           <tr>
             {COLUMNS.map((col) => (
-              <th key={col.key} onClick={() => toggleSort(col.key)}>
+              <th
+                key={col.key}
+                className={col.numeric ? "numeric" : ""}
+                onClick={() => toggleSort(col.key)}
+              >
                 {col.label}
                 {sortKey === col.key ? (sortDir === 1 ? " ▲" : " ▼") : ""}
               </th>
@@ -92,7 +98,7 @@ export function StockTable({ rows, onRemove }: Props) {
           {sorted.map((row) => (
             <tr key={row.ticker} className={row.error ? "row-error" : row.stale ? "row-stale" : ""}>
               {COLUMNS.map((col) => (
-                <td key={col.key}>
+                <td key={col.key} className={col.numeric ? "numeric" : ""}>
                   {col.format ? col.format(row[col.key]) : (row[col.key] as string) ?? "—"}
                 </td>
               ))}
@@ -116,6 +122,8 @@ export function StockTable({ rows, onRemove }: Props) {
             ))}
         </div>
       )}
-    </div>
+      </div>
+      <p className="table-hint">Scroll sideways for more metrics · click any column heading to sort</p>
+    </>
   );
 }

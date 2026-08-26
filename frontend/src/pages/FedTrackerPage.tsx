@@ -56,8 +56,12 @@ export function FedTrackerPage() {
   return (
     <section>
       <div className="page-header">
-        <h2>Fed Policy Tracker</h2>
-        <button onClick={handleRefresh} disabled={refreshing}>
+        <div>
+          <h2>Fed Policy Tracker</h2>
+          <p className="page-subtitle">Tone and takeaways from recent FOMC statements.</p>
+        </div>
+        <button className="btn" onClick={handleRefresh} disabled={refreshing}>
+          {refreshing && <span className="spinner" />}
           {refreshing ? "Checking federalreserve.gov…" : "Check for new statements"}
         </button>
       </div>
@@ -66,7 +70,7 @@ export function FedTrackerPage() {
       {error && <p className="error-line">{error}</p>}
 
       {loading ? (
-        <p>Loading…</p>
+        <p className="notice-line">Loading…</p>
       ) : timeline.length === 0 ? (
         <p className="empty-state">
           No statements cached yet. Click "Check for new statements" to fetch and summarize the
@@ -75,7 +79,10 @@ export function FedTrackerPage() {
       ) : (
         <ul className="fed-timeline">
           {timeline.map((item) => (
-            <li key={item.id} className="fed-item">
+            <li
+              key={item.id}
+              className={`fed-item${item.sentiment ? ` ${SENTIMENT_CLASS[item.sentiment]}` : ""}`}
+            >
               <div className="fed-item-header">
                 <span className="fed-date">{item.date}</span>
                 {item.sentiment && (
