@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS fundamentals_cache (
     fetched_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS market_cache (
+    cache_key TEXT PRIMARY KEY,
+    data_json TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS fed_statements (
     id TEXT PRIMARY KEY,
     date TEXT NOT NULL,
@@ -95,6 +101,40 @@ def set_cached_fundamentals(ticker: str, data: dict) -> None:
             ON CONFLICT(ticker) DO UPDATE SET data_json = excluded.data_json, fetched_at = excluded.fetched_at
             """,
             (ticker, json.dumps(data), now_iso()),
+        )
+
+
+# --- generic market cache ---
+
+def get_market_cache(key: str, max_age_seconds: int):
+    """Return cached payload for `key`, or None if missing or older than the TTL.
+
+    The FMP free tier allows 250 calls/day, so quotes and price history are
+    served from here unless they've gone stale.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT data_json, fetched_at FROM market_cache WHERE cache_key = ?", (key,)
+        ).fetchone()
+        if not row:
+            return None
+        fetched = datetime.fromisoformat(row["fetched_at"])
+        if (datetime.now(timezone.utc) - fetched).total_seconds() > max_age_seconds:
+            return None
+        return json.loads(row["data_json"])
+
+
+def set_market_cache(key: str, data) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO market_cache (cache_key, data_json, fetched_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                data_json = excluded.data_json,
+                fetched_at = excluded.fetched_at
+            """,
+            (key, json.dumps(data), now_iso()),
         )
 
 

@@ -8,6 +8,11 @@ Fed policy sentiment over time. Single-user, local-only MVP.
 
 ## Features
 
+0. **Dashboard** — a watchlist showing price, today's move and where each stock
+   sits in its 52-week range; stat tiles for the S&P 500, Nasdaq, Dow and
+   Russell 2000; and an interactive price chart (1M–5Y) for any watchlist name
+   or index. Search accepts company names, not just tickers — typing "apple"
+   finds AAPL.
 1. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
    market cap, revenue/EPS growth, margins, debt/equity, ROE, dividend yield,
    and more in a sortable table. Data from [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs).
@@ -56,6 +61,20 @@ npm run dev
 ```
 
 Open `http://localhost:5173`.
+
+## Staying inside the FMP free tier
+
+The free plan allows **250 API calls/day**, so everything is cached in SQLite:
+
+| Data | Cached for | Why |
+|---|---|---|
+| Fundamentals | 24h (`FUNDAMENTALS_CACHE_HOURS`) | Change at most quarterly |
+| Quotes (watchlist + indices) | 15 min | Fresh enough to be useful, cheap enough to browse |
+| Price history / sparklines | 12h | Daily closes only change once a day |
+| Fed statements | Forever | A published statement never changes |
+
+Normal use lands well under the limit. Clicking **Refresh** bypasses the quote
+cache, so hammering it is the one way to burn through calls quickly.
 
 ## Usage
 

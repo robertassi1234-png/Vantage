@@ -1,4 +1,13 @@
-import type { FedRefreshResult, FedStatement, FundamentalsRow, SymbolMatch } from "./types";
+import type {
+  FedRefreshResult,
+  FedStatement,
+  FundamentalsRow,
+  IndexQuote,
+  PriceHistory,
+  Quote,
+  RangeKey,
+  SymbolMatch,
+} from "./types";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -81,6 +90,21 @@ export const api = {
 
   getFundamentals: (refresh = false) =>
     request<FundamentalsRow[]>(`/api/fundamentals?refresh=${refresh}`),
+
+  getIndices: (refresh = false) =>
+    request<IndexQuote[]>(`/api/market/indices?refresh=${refresh}`),
+
+  getQuotes: (symbols: string[], refresh = false) =>
+    symbols.length === 0
+      ? Promise.resolve([] as Quote[])
+      : request<Quote[]>(
+          `/api/market/quotes?symbols=${encodeURIComponent(symbols.join(","))}&refresh=${refresh}`,
+        ),
+
+  getHistory: (symbol: string, range: RangeKey) =>
+    request<PriceHistory>(
+      `/api/market/history/${encodeURIComponent(symbol)}?range=${range}`,
+    ),
 
   getFedTimeline: () => request<FedStatement[]>("/api/fed/timeline"),
 

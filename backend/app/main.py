@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import init_db
-from app.routers import fed, stocks
+from app.routers import fed, market, stocks
 
 app = FastAPI(title="Vantage", description="Personal stock research app")
 
@@ -15,6 +15,7 @@ app.add_middleware(
 )
 
 app.include_router(stocks.router)
+app.include_router(market.router)
 app.include_router(fed.router)
 
 

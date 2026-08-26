@@ -5,6 +5,7 @@ in August 2025). Docs: https://site.financialmodelingprep.com/developer/docs/sta
 """
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -23,6 +24,20 @@ def _first(items: list | dict | None) -> dict:
     if isinstance(items, dict):
         return items
     return {}
+
+
+def _pick(source: dict, *names: str):
+    """Return the first present, non-null field.
+
+    FMP has renamed fields across API generations (mktCap -> marketCap,
+    changesPercentage -> changePercentage), so accept the known spellings
+    rather than pinning to one and breaking on the next rename.
+    """
+    for name in names:
+        value = source.get(name)
+        if value is not None:
+            return value
+    return None
 
 
 async def _get(client: httpx.AsyncClient, path: str, **params: str) -> list | dict:
@@ -128,6 +143,83 @@ async def fetch_fundamentals(ticker: str) -> dict:
         "returnOnEquity": key_metrics.get("returnOnEquityTTM"),
         "dividendYield": ratios.get("dividendYieldTTM"),
     }
+
+
+RANGE_DAYS = {"1M": 31, "3M": 92, "6M": 183, "1Y": 366, "5Y": 1827}
+
+
+async def fetch_quotes(symbols: list[str]) -> list[dict]:
+    """Current price and day change for one or more symbols.
+
+    Requests run concurrently; a symbol that fails is omitted rather than
+    failing the whole batch, so one bad index symbol can't blank the row.
+    """
+    if not settings.fmp_api_key:
+        raise FMPError("FMP_API_KEY is not set")
+    if not symbols:
+        return []
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        responses = await asyncio.gather(
+            *(_get(client, "quote", symbol=s) for s in symbols),
+            return_exceptions=True,
+        )
+
+    quotes = []
+    for symbol, response in zip(symbols, responses):
+        if isinstance(response, Exception):
+            continue
+        data = _first(response)
+        if not data:
+            continue
+        quotes.append(
+            {
+                "symbol": data.get("symbol") or symbol,
+                "name": _pick(data, "name", "companyName"),
+                "price": _pick(data, "price", "previousClose"),
+                "change": _pick(data, "change", "changes"),
+                "changePercent": _pick(data, "changePercentage", "changesPercentage"),
+                "dayLow": _pick(data, "dayLow"),
+                "dayHigh": _pick(data, "dayHigh"),
+                "yearLow": _pick(data, "yearLow"),
+                "yearHigh": _pick(data, "yearHigh"),
+                "marketCap": _pick(data, "marketCap", "mktCap"),
+                "volume": _pick(data, "volume"),
+            }
+        )
+    return quotes
+
+
+async def fetch_history(symbol: str, range_key: str = "1Y") -> list[dict]:
+    """Daily closing prices for a symbol over the requested range."""
+    if not settings.fmp_api_key:
+        raise FMPError("FMP_API_KEY is not set")
+
+    days = RANGE_DAYS.get(range_key.upper(), 366)
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
+    end = datetime.now(timezone.utc).date().isoformat()
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        data = await _get(
+            client, "historical-price-eod/light", symbol=symbol, **{"from": start, "to": end}
+        )
+
+    # The light endpoint returns a bare list; some variants nest it under
+    # "historical" alongside the symbol.
+    rows = data if isinstance(data, list) else data.get("historical", [])
+
+    points = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        date = row.get("date")
+        close = _pick(row, "close", "price", "adjClose")
+        if date and isinstance(close, (int, float)):
+            points.append({"date": str(date)[:10], "close": float(close)})
+
+    # FMP returns newest-first; charts read left-to-right oldest-first.
+    points.sort(key=lambda p: p["date"])
+    return points
 
 
 async def _gather(client: httpx.AsyncClient, ticker: str):

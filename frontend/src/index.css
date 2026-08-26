@@ -288,6 +288,370 @@ button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ---------- Section headings ---------- */
+
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1.75rem 0 0.75rem;
+}
+
+.section-note {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+
+/* ---------- Direction tones ---------- */
+
+.tone-up {
+  --tone: var(--dovish);
+  --tone-soft: var(--dovish-soft);
+}
+
+.tone-down {
+  --tone: var(--hawkish);
+  --tone-soft: var(--hawkish-soft);
+}
+
+.tone-flat {
+  --tone: var(--muted);
+  --tone-soft: var(--neutral-soft);
+}
+
+/* ---------- Watchlist ---------- */
+
+.watchlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.watch-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.watch-row:last-child {
+  border-bottom: none;
+}
+
+.watch-row:hover {
+  background: var(--surface-2);
+}
+
+.watch-row.active {
+  background: var(--accent-soft);
+}
+
+.watch-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) 100px 150px 190px;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+
+.watch-symbol {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.watch-name {
+  color: var(--muted);
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-price {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-delta {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--tone);
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-range {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+}
+
+.range-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.range-marker {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tone);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.watch-range-na {
+  flex: 1;
+  text-align: center;
+}
+
+/* ---------- Index tiles ---------- */
+
+.index-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+}
+
+.index-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.95rem 1.05rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.index-tile:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.index-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.index-label {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.index-blurb {
+  font-size: 0.72rem;
+  color: var(--muted-2);
+  margin-bottom: 0.4rem;
+}
+
+/* Proportional figures: a large standalone number reads loose with tabular-nums. */
+.index-value {
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.index-delta {
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--tone);
+  margin-bottom: 0.5rem;
+}
+
+/* ---------- Sparkline ---------- */
+
+.sparkline path {
+  stroke: var(--tone, var(--muted));
+}
+
+.sparkline-dot {
+  fill: var(--tone, var(--muted));
+}
+
+.sparkline-empty {
+  display: block;
+}
+
+/* ---------- Price chart ---------- */
+
+.chart-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1rem 1.1rem 0.5rem;
+}
+
+.range-row {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+
+.range-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.range-btn:hover {
+  color: var(--text);
+}
+
+.range-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.price-chart {
+  display: block;
+  touch-action: none;
+}
+
+.price-chart.tone-up {
+  --tone: var(--dovish);
+}
+
+.price-chart.tone-down {
+  --tone: var(--hawkish);
+}
+
+.chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  fill: var(--muted-2);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.chart-line {
+  stroke: var(--tone);
+}
+
+.chart-area {
+  fill: var(--tone);
+  opacity: 0.1;
+}
+
+.chart-end-dot {
+  fill: var(--tone);
+}
+
+.chart-end-ring {
+  fill: none;
+  stroke: var(--surface);
+}
+
+.chart-crosshair {
+  stroke: var(--muted-2);
+  stroke-width: 1;
+}
+
+.chart-loading {
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 2rem 1rem;
+}
+
+.chart-tooltip {
+  position: absolute;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.6rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.tooltip-value {
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-family: var(--font-mono);
+}
+
+.tooltip-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ---------- Footer ---------- */
+
+.app-footer {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.app-footer p {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--muted-2);
+  line-height: 1.6;
+}
+
+@media (max-width: 760px) {
+  .watch-main {
+    grid-template-columns: 64px minmax(0, 1fr) 90px;
+  }
+
+  .watch-range {
+    display: none;
+  }
+}
+
 /* ---------- Ticker search ---------- */
 
 .ticker-search {
