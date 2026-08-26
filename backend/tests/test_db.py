@@ -21,13 +21,21 @@ class TestWatchlist:
         db.add_to_watchlist("AAPL")
         assert db.get_watchlist() == ["AAPL"]
 
-    def test_remove_also_drops_cached_fundamentals(self):
+    def test_remove_keeps_the_shared_fundamentals_cache(self):
+        """Removing a ticker must not evict data other watchlists still use.
+
+        This inverts the original behaviour. When there was one global
+        watchlist, dropping the cache on removal was tidy housekeeping. Now
+        that watchlists are per browser and the cache is shared, evicting on
+        removal would let one person cost everyone else four API calls out of
+        a 250-a-day budget.
+        """
         db.add_to_watchlist("AAPL")
         db.set_cached_fundamentals("AAPL", {"ticker": "AAPL"})
         db.remove_from_watchlist("AAPL")
 
         assert db.get_watchlist() == []
-        assert db.get_cached_fundamentals("AAPL") is None
+        assert db.get_cached_fundamentals("AAPL") is not None
 
 
 class TestFundamentalsCache:

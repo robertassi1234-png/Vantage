@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
+import { downloadCsv } from "../csv";
 import { StockTable } from "../components/StockTable";
 import { TickerSearch } from "../components/TickerSearch";
 import type { FundamentalsRow } from "../types";
@@ -56,10 +57,21 @@ export function ComparisonPage() {
             Search a company by name or ticker, then compare the fundamentals side by side.
           </p>
         </div>
-        <button className="btn" onClick={() => loadFundamentals(true)} disabled={loading}>
-          {loading && <span className="spinner" />}
-          {loading ? "Loading…" : "Refresh data"}
-        </button>
+        <div className="header-buttons">
+          {rows.length > 0 && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => downloadCsv(rows)}
+              title="Download the table as a spreadsheet"
+            >
+              Export CSV
+            </button>
+          )}
+          <button className="btn" onClick={() => loadFundamentals(true)} disabled={loading}>
+            {loading && <span className="spinner" />}
+            {loading ? "Loading…" : "Refresh data"}
+          </button>
+        </div>
       </div>
 
       <TickerSearch onSelect={handleAdd} disabled={loading} />

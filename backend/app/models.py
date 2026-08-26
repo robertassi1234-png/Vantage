@@ -5,6 +5,10 @@ class TickerRequest(BaseModel):
     ticker: str
 
 
+class NoteRequest(BaseModel):
+    note: str | None = None
+
+
 class FundamentalsRow(BaseModel):
     ticker: str
     companyName: str | None = None

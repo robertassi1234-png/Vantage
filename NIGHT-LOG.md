@@ -14,6 +14,67 @@ Ground rules for these sessions:
 
 ---
 
+## 2026-08-26 — Iteration 5: per-browser watchlists + quality of life
+
+**Why:** the deployed link showed everyone the same watchlist, because the
+original brief specified a single-user tool and the schema had no notion of a
+user. Anyone opening the URL could edit your list.
+
+**Per-browser spaces.** Each browser generates a random id (`vantage.space` in
+localStorage) and sends it as `X-Vantage-Space`. Watchlists and notes are
+scoped to it.
+
+Two deliberate decisions worth recording:
+
+- **Only watchlists are scoped. Prices, fundamentals and Fed summaries stay
+  global.** AAPL's P/E is the same number for everyone, so a shared cache means
+  a second visitor costs zero extra API calls. Scoping the cache per browser
+  would multiply usage by the number of visitors — exactly backwards on a
+  250-a-day budget.
+- **This is separation, not security.** Anyone holding an id can read that
+  watchlist. It stops two people colliding; it does not keep secrets. The
+  footer says so plainly rather than implying privacy that isn't there.
+
+Space ids are client-supplied, so they're validated against
+`[A-Za-z0-9_-]{1,64}` and fall back to the shared default otherwise — six
+hostile inputs are covered, including SQL injection and traversal attempts.
+
+An existing database is migrated in place via `PRAGMA table_info`, since
+`CREATE TABLE IF NOT EXISTS` leaves an old table untouched. Existing rows land
+in the default space rather than being dropped.
+
+**One test changed meaning, deliberately:**
+`test_remove_also_drops_cached_fundamentals` asserted that removing a ticker
+evicted its cached numbers. Correct when there was one watchlist; wrong now
+that the cache is shared. Rewritten as
+`test_remove_keeps_the_shared_fundamentals_cache` with the reasoning in the
+docstring — the premise changed by design, so the test was updated rather than
+deleted.
+
+**Quality of life** (all zero API cost, chosen with the call budget in mind):
+
+- Theme toggle cycling Auto → Light → Dark, persisted. "Auto" removes the
+  attribute so it tracks the OS rather than freezing today's mode.
+- The app reopens on the tab you left.
+- CSV export of the comparison table. Values are exported raw so they stay
+  computable, and any field starting with `=`, `+`, `-` or `@` is prefixed with
+  a quote — spreadsheets execute those as formulas, and a negative growth
+  figure is the everyday case.
+- Per-ticker notes (backend + API; UI still to come).
+- A global `:focus-visible` ring, so keyboard users can see where they are.
+
+**Verified:** backend 105 passed · frontend 103 passed · build clean ·
+screenshots checked in both themes.
+
+**Notes for the morning:**
+
+- yfinance needs no API key — nothing to sign up for. Adding `yfinance` to
+  `requirements.txt` is the whole setup.
+- Seven oxlint `set-state-in-effect` warnings now (two new, from the theme and
+  tab persistence). Still non-blocking; queued for the bug-hunt pass.
+
+---
+
 ## 2026-08-26 — Iteration 4: two real backend bugs
 
 **First production bugs of the night.** Both found by reading the indices route

@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app import db
 from app.config import settings
 from app.fmp_client import FMPError, fetch_fundamentals, search_symbols
-from app.models import FundamentalsRow, TickerRequest
+from app.models import FundamentalsRow, NoteRequest, TickerRequest
+from app.space import current_space
 
 router = APIRouter(prefix="/api", tags=["stocks"])
 
@@ -20,23 +21,37 @@ async def search(q: str) -> list[dict]:
 
 
 @router.get("/watchlist")
-def list_watchlist() -> list[str]:
-    return db.get_watchlist()
+def list_watchlist(space: str = Depends(current_space)) -> list[str]:
+    return db.get_watchlist(space)
+
+
+@router.get("/watchlist/entries")
+def list_watchlist_entries(space: str = Depends(current_space)) -> list[dict]:
+    """Watchlist with the date each ticker was added and any note on it."""
+    return db.get_watchlist_entries(space)
 
 
 @router.post("/watchlist")
-def add_ticker(req: TickerRequest) -> list[str]:
+def add_ticker(req: TickerRequest, space: str = Depends(current_space)) -> list[str]:
     ticker = req.ticker.strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker cannot be empty")
-    db.add_to_watchlist(ticker)
-    return db.get_watchlist()
+    db.add_to_watchlist(ticker, space)
+    return db.get_watchlist(space)
+
+
+@router.put("/watchlist/{ticker}/note")
+def set_note(
+    ticker: str, req: NoteRequest, space: str = Depends(current_space)
+) -> list[dict]:
+    db.set_watchlist_note(ticker.strip().upper(), req.note, space)
+    return db.get_watchlist_entries(space)
 
 
 @router.delete("/watchlist/{ticker}")
-def remove_ticker(ticker: str) -> list[str]:
-    db.remove_from_watchlist(ticker.strip().upper())
-    return db.get_watchlist()
+def remove_ticker(ticker: str, space: str = Depends(current_space)) -> list[str]:
+    db.remove_from_watchlist(ticker.strip().upper(), space)
+    return db.get_watchlist(space)
 
 
 def _is_stale(fetched_at: str) -> bool:
@@ -45,8 +60,10 @@ def _is_stale(fetched_at: str) -> bool:
 
 
 @router.get("/fundamentals")
-async def get_fundamentals(refresh: bool = False) -> list[FundamentalsRow]:
-    tickers = db.get_watchlist()
+async def get_fundamentals(
+    refresh: bool = False, space: str = Depends(current_space)
+) -> list[FundamentalsRow]:
+    tickers = db.get_watchlist(space)
     results: list[FundamentalsRow] = []
 
     for ticker in tickers:

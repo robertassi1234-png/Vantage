@@ -8,6 +8,7 @@ import type {
   RangeKey,
   SymbolMatch,
 } from "./types";
+import { getSpaceId } from "./space";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
@@ -48,8 +49,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   for (let attempt = 0; attempt <= COLD_START_RETRIES; attempt++) {
     try {
       const res = await fetch(`${BASE_URL}${path}`, {
-        headers: { "Content-Type": "application/json" },
         ...options,
+        headers: {
+          "Content-Type": "application/json",
+          // Scopes the watchlist to this browser so two people opening the
+          // same URL don't share one list.
+          "X-Vantage-Space": getSpaceId(),
+          ...options?.headers,
+        },
       });
 
       if (!res.ok) {
