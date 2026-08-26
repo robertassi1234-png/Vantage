@@ -1,7 +1,73 @@
+import httpx
 import pytest
 
 from app import fmp_client
 from app.fmp_client import FMPError
+
+
+class TestTransportErrorsBecomeFMPErrors:
+    """Every failure must leave _get as an FMPError.
+
+    Callers catch FMPError to degrade gracefully -- serving stale prices,
+    flagging one row. A raw httpx error escaping turns a single flaky request
+    into a 500 for the whole endpoint.
+    """
+
+    def stub_client(self, monkeypatch, *, raises=None, response=None):
+        class FakeClient:
+            async def get(self, url, params=None):
+                if raises is not None:
+                    raise raises
+                return response
+
+        return FakeClient()
+
+    async def test_connect_error_is_wrapped(self, monkeypatch):
+        client = self.stub_client(monkeypatch, raises=httpx.ConnectError("no route"))
+        with pytest.raises(FMPError, match="Couldn't reach"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_timeout_is_wrapped(self, monkeypatch):
+        client = self.stub_client(monkeypatch, raises=httpx.ReadTimeout("slow"))
+        with pytest.raises(FMPError, match="Couldn't reach"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_proxy_error_is_wrapped(self, monkeypatch):
+        client = self.stub_client(monkeypatch, raises=httpx.ProxyError("403 Forbidden"))
+        with pytest.raises(FMPError, match="Couldn't reach"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_server_error_status_is_wrapped(self, monkeypatch):
+        request = httpx.Request("GET", "https://financialmodelingprep.com/stable/profile")
+        response = httpx.Response(500, request=request, text="boom")
+        client = self.stub_client(monkeypatch, response=response)
+
+        with pytest.raises(FMPError, match="returned 500"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_malformed_body_is_wrapped(self, monkeypatch):
+        request = httpx.Request("GET", "https://financialmodelingprep.com/stable/profile")
+        response = httpx.Response(200, request=request, text="<html>not json</html>")
+        client = self.stub_client(monkeypatch, response=response)
+
+        with pytest.raises(FMPError, match="malformed"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_rate_limit_keeps_its_specific_message(self, monkeypatch):
+        request = httpx.Request("GET", "https://financialmodelingprep.com/stable/profile")
+        response = httpx.Response(429, request=request, text="slow down")
+        client = self.stub_client(monkeypatch, response=response)
+
+        with pytest.raises(FMPError, match="rate limit"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
+
+    async def test_bad_key_keeps_its_specific_message(self, monkeypatch):
+        request = httpx.Request("GET", "https://financialmodelingprep.com/stable/profile")
+        response = httpx.Response(401, request=request, text="denied")
+        client = self.stub_client(monkeypatch, response=response)
+
+        with pytest.raises(FMPError, match="key is missing or invalid"):
+            await fmp_client._get(client, "profile", symbol="AAPL")
 
 PROFILE = {
     "symbol": "AAPL",

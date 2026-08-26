@@ -14,6 +14,54 @@ Ground rules for these sessions:
 
 ---
 
+## 2026-08-26 — Iteration 4: two real backend bugs
+
+**First production bugs of the night.** Both found by reading the indices route
+adversarially, both reproduced with a failing test before any fix, and both
+confirmed to fail against the old code (stashed the fix, watched the tests go
+red, restored it).
+
+### Bug 1 — a network blip 500'd the whole indices endpoint
+
+`_get` let transport-level exceptions escape. `httpx` raises `ConnectError`,
+`ReadTimeout`, `ProxyError` and `HTTPStatusError`, none of which are
+`FMPError` — so every `except FMPError` in the codebase silently failed to
+catch them. `_sparkline` looked like it degraded gracefully; in reality one
+slow sparkline request took down `/api/market/indices` with a 500.
+
+Fixed at the choke point: `_get` now converts transport errors, non-2xx
+statuses and malformed JSON bodies into `FMPError`, so callers' existing
+graceful degradation actually works. Seven cases pin it.
+
+This surfaced by accident — a test failed with `httpx.ProxyError: 403` instead
+of the assertion I expected, because the sandbox blocks outbound requests. The
+sandbox restriction turned out to be a useful fault injector.
+
+### Bug 2 — a failed refresh blanked the dashboard for 15 minutes
+
+`fetch_quotes` deliberately drops symbols it can't retrieve rather than
+failing the batch, so a total outage returns `[]` rather than raising. The
+route didn't treat that as failure: it built four tiles with `price: None` and
+**wrote them over a perfectly good cached copy**, so the index row stayed blank
+for the full 15-minute TTL even though valid prices had been sitting in the
+cache.
+
+Now an empty batch takes the same path as an exception — serve the stale copy
+if there is one, otherwise return an honest 502 — and never overwrites the
+cache. A partial batch is still served, so one dead symbol doesn't cost the
+other three their prices.
+
+**Also:** the four sparkline lookups now run through `asyncio.gather` instead
+of sequentially, and `StockTable` gained 16 cases (numeric-vs-lexical sorting,
+blanks staying last in *both* directions, no mutation of the rows prop).
+
+**Verified:** backend 85 passed · frontend 88 passed · build clean.
+
+**Notes for the morning:** the empty-`<th>` cells in the table's group header
+row have no accessible name — queued for the accessibility pass.
+
+---
+
 ## 2026-08-26 — Iteration 3: TickerSearch behaviour
 
 **Added:** `src/components/TickerSearch.test.tsx` — 13 cases covering debounce

@@ -21,6 +21,11 @@ def client():
         yield c
 
 
+async def _no_history(symbol, range_key):
+    """Stub so sparkline lookups don't reach the network during route tests."""
+    return []
+
+
 class TestWatchlistRoutes:
     def test_add_normalises_case_and_whitespace(self, client):
         assert client.post("/api/watchlist", json={"ticker": " aapl "}).json() == ["AAPL"]
@@ -172,6 +177,7 @@ class TestMarketRoutes:
             raise FMPError("rate limited")
 
         monkeypatch.setattr(market_router, "fetch_quotes", boom)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
         resp = client.get("/api/market/indices?refresh=true")
         assert resp.status_code == 200
         assert resp.json()[0]["price"] == 6000
@@ -181,7 +187,61 @@ class TestMarketRoutes:
             raise FMPError("rate limited")
 
         monkeypatch.setattr(market_router, "fetch_quotes", boom)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
         assert client.get("/api/market/indices?refresh=true").status_code == 502
+
+    def test_empty_quote_batch_does_not_poison_the_cache(self, client, monkeypatch):
+        """A total upstream failure must not overwrite good cached prices.
+
+        fetch_quotes drops symbols it can't fetch instead of raising, so an
+        outage that kills every symbol returns [] rather than an FMPError. The
+        route has to recognise that as failure, or it caches four blank tiles
+        over a healthy copy and the dashboard stays empty for the whole TTL.
+        """
+        good = [{"symbol": "^GSPC", "label": "S&P 500", "price": 6000, "sparkline": []}]
+        db.set_market_cache("indices", good)
+
+        async def all_symbols_failed(symbols):
+            return []
+
+        monkeypatch.setattr(market_router, "fetch_quotes", all_symbols_failed)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+        resp = client.get("/api/market/indices?refresh=true")
+        assert resp.status_code == 200
+        assert resp.json()[0]["price"] == 6000
+
+        # The cached copy must survive for the next reader too.
+        assert db.get_market_cache("indices", 900)[0]["price"] == 6000
+
+    def test_empty_quote_batch_with_no_cache_is_502(self, client, monkeypatch):
+        async def all_symbols_failed(symbols):
+            return []
+
+        monkeypatch.setattr(market_router, "fetch_quotes", all_symbols_failed)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+        assert client.get("/api/market/indices?refresh=true").status_code == 502
+
+    def test_partial_quote_batch_is_still_served(self, client, monkeypatch):
+        """One dead symbol shouldn't cost the other three their prices."""
+
+        async def one_symbol_only(symbols):
+            return [
+                {
+                    "symbol": "^GSPC",
+                    "price": 6500,
+                    "change": 10,
+                    "changePercent": 0.15,
+                }
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", one_symbol_only)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+        body = client.get("/api/market/indices?refresh=true").json()
+        by_symbol = {row["symbol"]: row for row in body}
+        assert by_symbol["^GSPC"]["price"] == 6500
+        assert by_symbol["^IXIC"]["price"] is None
 
 
 def test_health(client):

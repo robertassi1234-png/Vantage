@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
 from app import db
@@ -31,18 +33,30 @@ async def get_indices(refresh: bool = False) -> list[dict]:
             return cached
 
     symbols = [i["symbol"] for i in INDICES]
-    try:
-        quotes = await fetch_quotes(symbols)
-    except FMPError as e:
+
+    def stale_or_fail(detail: str):
+        """Old prices beat blank tiles; a blank cache is worth an honest error."""
         cached = db.get_market_cache(cache_key, max_age_seconds=7 * 24 * 3600)
         if cached is not None:
             return cached
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        raise HTTPException(status_code=502, detail=detail)
+
+    try:
+        quotes = await fetch_quotes(symbols)
+    except FMPError as e:
+        return stale_or_fail(str(e))
+
+    # fetch_quotes drops symbols it couldn't retrieve rather than raising, so an
+    # outage that kills every symbol arrives here as an empty list. Caching that
+    # would blank the dashboard for a full TTL and overwrite good prices.
+    if not quotes:
+        return stale_or_fail("Couldn't fetch index prices right now.")
 
     by_symbol = {q["symbol"]: q for q in quotes}
+    sparklines = await asyncio.gather(*(_sparkline(i["symbol"]) for i in INDICES))
 
     results = []
-    for index in INDICES:
+    for index, sparkline in zip(INDICES, sparklines):
         quote = by_symbol.get(index["symbol"], {})
         results.append(
             {
@@ -50,7 +64,7 @@ async def get_indices(refresh: bool = False) -> list[dict]:
                 "price": quote.get("price"),
                 "change": quote.get("change"),
                 "changePercent": quote.get("changePercent"),
-                "sparkline": await _sparkline(index["symbol"]),
+                "sparkline": sparkline,
             }
         )
 

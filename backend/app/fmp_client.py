@@ -41,16 +41,36 @@ def _pick(source: dict, *names: str):
 
 
 async def _get(client: httpx.AsyncClient, path: str, **params: str) -> list | dict:
-    resp = await client.get(
-        f"{BASE_URL}/{path}",
-        params={"apikey": settings.fmp_api_key, **params},
-    )
+    """Single choke point for FMP calls.
+
+    Every failure leaves here as an FMPError, including transport-level ones.
+    Callers catch FMPError to degrade gracefully; letting a raw httpx timeout
+    or connection error escape turns one flaky request into a 500 for the
+    whole endpoint.
+    """
+    try:
+        resp = await client.get(
+            f"{BASE_URL}/{path}",
+            params={"apikey": settings.fmp_api_key, **params},
+        )
+    except httpx.HTTPError as e:
+        raise FMPError(f"Couldn't reach the market data service: {e}") from e
+
     if resp.status_code == 401 or resp.status_code == 403:
         raise FMPError("FMP API key is missing or invalid")
     if resp.status_code == 429:
         raise FMPError("FMP API rate limit reached (free tier: 250 calls/day)")
-    resp.raise_for_status()
-    data = resp.json()
+
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as e:
+        raise FMPError(f"Market data service returned {resp.status_code}") from e
+
+    try:
+        data = resp.json()
+    except ValueError as e:
+        raise FMPError("Market data service returned a malformed response") from e
+
     if isinstance(data, dict) and data.get("Error Message"):
         raise FMPError(data["Error Message"])
     return data
