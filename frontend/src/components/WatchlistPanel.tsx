@@ -1,11 +1,28 @@
 import type { Quote } from "../types";
 
 interface Props {
+  /** The watchlist itself. Rows come from here, never from the quotes. */
+  tickers: string[];
   quotes: Quote[];
   onSelect: (symbol: string, label: string) => void;
   onRemove: (symbol: string) => void;
   activeSymbol?: string | null;
 }
+
+/** A row with no quote yet: the ticker is known, the pricing is not. */
+const placeholderQuote = (symbol: string): Quote => ({
+  symbol,
+  name: null,
+  price: null,
+  change: null,
+  changePercent: null,
+  dayLow: null,
+  dayHigh: null,
+  yearLow: null,
+  yearHigh: null,
+  marketCap: null,
+  volume: null,
+});
 
 const fmtPrice = (v: number | null) => (typeof v === "number" ? `$${v.toFixed(2)}` : "—");
 
@@ -23,8 +40,11 @@ function yearPosition(q: Quote): number | null {
   return Math.min(Math.max((q.price - q.yearLow) / span, 0), 1);
 }
 
-export function WatchlistPanel({ quotes, onSelect, onRemove, activeSymbol }: Props) {
-  if (quotes.length === 0) {
+export function WatchlistPanel({ tickers, quotes, onSelect, onRemove, activeSymbol }: Props) {
+  // Empty means the list is empty -- not that pricing failed. Deriving rows
+  // from the quotes made a working watchlist look unsaved whenever the market
+  // data provider was throttling.
+  if (tickers.length === 0) {
     return (
       <div className="empty-state">
         <p className="empty-title">Your watchlist is empty</p>
@@ -33,9 +53,21 @@ export function WatchlistPanel({ quotes, onSelect, onRemove, activeSymbol }: Pro
     );
   }
 
+  const quoteFor = new Map(quotes.map((q) => [q.symbol, q]));
+  const rows = tickers.map((t) => quoteFor.get(t) ?? placeholderQuote(t));
+  const unpriced = rows.filter((r) => r.price == null).length;
+
   return (
-    <ul className="watchlist">
-      {quotes.map((q) => {
+    <>
+      {unpriced > 0 && (
+        <p className="notice-line">
+          {unpriced === rows.length
+            ? "Prices are unavailable right now — your list is safe, try Refresh in a moment."
+            : `${unpriced} of these couldn't be priced right now.`}
+        </p>
+      )}
+      <ul className="watchlist">
+      {rows.map((q) => {
         const pct = q.changePercent;
         const direction = pct == null ? "flat" : pct > 0 ? "up" : pct < 0 ? "down" : "flat";
         const pos = yearPosition(q);
@@ -44,7 +76,7 @@ export function WatchlistPanel({ quotes, onSelect, onRemove, activeSymbol }: Pro
           <li key={q.symbol} className={`watch-row tone-${direction}${activeSymbol === q.symbol ? " active" : ""}`}>
             <button className="watch-main" onClick={() => onSelect(q.symbol, q.name ?? q.symbol)}>
               <span className="watch-symbol">{q.symbol}</span>
-              <span className="watch-name">{q.name ?? "—"}</span>
+              <span className="watch-name">{q.name ?? "Price unavailable"}</span>
 
               <span className="watch-price">{fmtPrice(q.price)}</span>
               <span className="watch-delta">
@@ -79,6 +111,7 @@ export function WatchlistPanel({ quotes, onSelect, onRemove, activeSymbol }: Pro
           </li>
         );
       })}
-    </ul>
+      </ul>
+    </>
   );
 }

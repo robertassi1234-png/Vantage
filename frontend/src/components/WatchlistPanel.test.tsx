@@ -24,12 +24,12 @@ const markerLeft = (container: HTMLElement) =>
 
 describe("WatchlistPanel", () => {
   it("prompts to add something when empty", () => {
-    render(<WatchlistPanel quotes={[]} onSelect={vi.fn()} onRemove={vi.fn()} />);
+    render(<WatchlistPanel tickers={[]} quotes={[]} onSelect={vi.fn()} onRemove={vi.fn()} />);
     expect(screen.getByText(/watchlist is empty/i)).toBeInTheDocument();
   });
 
   it("shows price and percent change", () => {
-    render(<WatchlistPanel quotes={[quote()]} onSelect={vi.fn()} onRemove={vi.fn()} />);
+    render(<WatchlistPanel tickers={["AAPL"]} quotes={[quote()]} onSelect={vi.fn()} onRemove={vi.fn()} />);
     expect(screen.getByText("$300.00")).toBeInTheDocument();
     expect(screen.getByText(/\+0\.67%/)).toBeInTheDocument();
   });
@@ -37,7 +37,7 @@ describe("WatchlistPanel", () => {
   it("signs a negative move and tones the row down", () => {
     const { container } = render(
       <WatchlistPanel
-        quotes={[quote({ change: -3.18, changePercent: -0.62 })]}
+        tickers={["AAPL"]} quotes={[quote({ change: -3.18, changePercent: -0.62 })]}
         onSelect={vi.fn()}
         onRemove={vi.fn()}
       />,
@@ -50,7 +50,7 @@ describe("WatchlistPanel", () => {
     it("sits halfway when the price is midway", () => {
       const { container } = render(
         <WatchlistPanel
-          quotes={[quote({ price: 300, yearLow: 200, yearHigh: 400 })]}
+          tickers={["AAPL"]} quotes={[quote({ price: 300, yearLow: 200, yearHigh: 400 })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -61,7 +61,7 @@ describe("WatchlistPanel", () => {
     it("pins to each end at the low and the high", () => {
       const low = render(
         <WatchlistPanel
-          quotes={[quote({ price: 200, yearLow: 200, yearHigh: 400 })]}
+          tickers={["AAPL"]} quotes={[quote({ price: 200, yearLow: 200, yearHigh: 400 })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -70,7 +70,7 @@ describe("WatchlistPanel", () => {
 
       const high = render(
         <WatchlistPanel
-          quotes={[quote({ price: 400, yearLow: 200, yearHigh: 400 })]}
+          tickers={["AAPL"]} quotes={[quote({ price: 400, yearLow: 200, yearHigh: 400 })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -82,7 +82,7 @@ describe("WatchlistPanel", () => {
       // Intraday highs can exceed a stale yearHigh; the marker must not escape.
       const { container } = render(
         <WatchlistPanel
-          quotes={[quote({ price: 500, yearLow: 200, yearHigh: 400 })]}
+          tickers={["AAPL"]} quotes={[quote({ price: 500, yearLow: 200, yearHigh: 400 })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -93,7 +93,7 @@ describe("WatchlistPanel", () => {
     it("is omitted when the range data is missing", () => {
       const { container } = render(
         <WatchlistPanel
-          quotes={[quote({ yearLow: null, yearHigh: null })]}
+          tickers={["AAPL"]} quotes={[quote({ yearLow: null, yearHigh: null })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -104,7 +104,7 @@ describe("WatchlistPanel", () => {
     it("is omitted rather than dividing by zero on a zero-width range", () => {
       const { container } = render(
         <WatchlistPanel
-          quotes={[quote({ price: 200, yearLow: 200, yearHigh: 200 })]}
+          tickers={["AAPL"]} quotes={[quote({ price: 200, yearLow: 200, yearHigh: 200 })]}
           onSelect={vi.fn()}
           onRemove={vi.fn()}
         />,
@@ -116,7 +116,7 @@ describe("WatchlistPanel", () => {
   describe("interaction", () => {
     it("selects the symbol when the row is clicked", async () => {
       const onSelect = vi.fn();
-      render(<WatchlistPanel quotes={[quote()]} onSelect={onSelect} onRemove={vi.fn()} />);
+      render(<WatchlistPanel tickers={["AAPL"]} quotes={[quote()]} onSelect={onSelect} onRemove={vi.fn()} />);
 
       await userEvent.click(screen.getByText("Apple Inc."));
       expect(onSelect).toHaveBeenCalledWith("AAPL", "Apple Inc.");
@@ -125,7 +125,7 @@ describe("WatchlistPanel", () => {
     it("removes without also triggering selection", async () => {
       const onSelect = vi.fn();
       const onRemove = vi.fn();
-      render(<WatchlistPanel quotes={[quote()]} onSelect={onSelect} onRemove={onRemove} />);
+      render(<WatchlistPanel tickers={["AAPL"]} quotes={[quote()]} onSelect={onSelect} onRemove={onRemove} />);
 
       await userEvent.click(screen.getByLabelText("Remove AAPL"));
       expect(onRemove).toHaveBeenCalledWith("AAPL");
@@ -135,7 +135,7 @@ describe("WatchlistPanel", () => {
     it("falls back to the symbol when the company name is missing", async () => {
       const onSelect = vi.fn();
       render(
-        <WatchlistPanel quotes={[quote({ name: null })]} onSelect={onSelect} onRemove={vi.fn()} />,
+        <WatchlistPanel tickers={["AAPL"]} quotes={[quote({ name: null })]} onSelect={onSelect} onRemove={vi.fn()} />,
       );
 
       await userEvent.click(screen.getByText("AAPL"));
@@ -146,7 +146,7 @@ describe("WatchlistPanel", () => {
   it("renders missing prices as a dash rather than NaN", () => {
     render(
       <WatchlistPanel
-        quotes={[quote({ price: null, change: null, changePercent: null })]}
+        tickers={["AAPL"]} quotes={[quote({ price: null, change: null, changePercent: null })]}
         onSelect={vi.fn()}
         onRemove={vi.fn()}
       />,

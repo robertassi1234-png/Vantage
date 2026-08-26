@@ -16,6 +16,10 @@ import {
 } from "../types";
 
 export function DashboardPage() {
+  // The watchlist is the source of truth for what to render; quotes only
+  // decorate it. Keeping them separate means a failed price lookup can no
+  // longer make a populated list look empty.
+  const [tickers, setTickers] = useState<string[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [indices, setIndices] = useState<IndexQuote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +39,7 @@ export function DashboardPage() {
     setError(null);
     try {
       const watchlist = await api.getList("watch");
+      setTickers(watchlist);
       // Indices and quotes are independent; one failing shouldn't blank the other.
       const [indexResult, quoteResult] = await Promise.allSettled([
         api.getIndices(refresh),
@@ -118,6 +123,7 @@ export function DashboardPage() {
   async function handleRemove(symbol: string) {
     try {
       await api.removeFromList("watch", symbol);
+      setTickers((prev) => prev.filter((t) => t !== symbol));
       setQuotes((prev) => prev.filter((q) => q.symbol !== symbol));
       if (chartSymbol === symbol) setChartSymbol(null);
     } catch (e) {
@@ -170,6 +176,7 @@ export function DashboardPage() {
         <span className="section-note">Click any row for its full price chart</span>
       </h3>
       <WatchlistPanel
+        tickers={tickers}
         quotes={quotes}
         onSelect={showChart}
         onRemove={handleRemove}
