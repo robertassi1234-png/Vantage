@@ -68,6 +68,26 @@ Open `http://localhost:5173`.
   cached. Already-summarized statements are skipped, so repeated clicks don't
   re-spend Claude API calls.
 
+## Deploying (Render, free tier)
+
+A `render.yaml` blueprint at the repo root deploys the backend as a web
+service and the frontend as a static site in one pass — see your chat with
+Claude for a click-by-click walkthrough. Two things worth knowing before you
+deploy:
+
+- **CORS_ORIGINS** defaults to `*` in `render.yaml` so the deployed frontend
+  can call the deployed backend without you having to match URLs by hand.
+  Fine for a single-user personal app; tighten it to your frontend's exact
+  URL later if you want.
+- **Free tier storage is not persistent.** Render's free web services don't
+  have a persistent disk, so the SQLite file (your watchlist + cached
+  fundamentals + Fed timeline) resets whenever the service restarts — which
+  happens automatically after ~15 minutes of no traffic. Your data will
+  survive while you're actively using it in one sitting, but you may need to
+  re-add tickers next time you come back. To make it persistent, upgrade the
+  backend service to a paid "Starter" instance, add a Disk (mount path
+  `/var/data`), and set `VANTAGE_DB_PATH=/var/data/vantage.db`.
+
 ## Project layout
 
 ```
@@ -95,11 +115,9 @@ frontend/
 
 ## Notes / next steps
 
-- This is local-only by design — no auth, no multi-tenancy. If you later want
-  to deploy it, the natural path is: containerize the backend, point
-  `VANTAGE_DB_PATH` at a persistent volume, and serve the frontend build
-  (`npm run build`) as static files (e.g. behind the same reverse proxy as the
-  API, with `VITE_API_BASE_URL` set at build time).
+- This is a single-user app by design — no auth, no multi-tenancy. Don't
+  share the deployed frontend URL publicly if you'd rather keep your
+  watchlist private (there's no login screen).
 - If you want daily automatic Fed updates instead of the on-demand button,
   add a scheduler (e.g. `APScheduler`) that calls the same refresh logic in
   `app/routers/fed.py` on a timer.
