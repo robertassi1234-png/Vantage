@@ -4,7 +4,16 @@ import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
 import { TickerSearch } from "../components/TickerSearch";
 import { WatchlistPanel } from "../components/WatchlistPanel";
-import { RANGES, type IndexQuote, type PricePoint, type Quote, type RangeKey } from "../types";
+import { AlertsPanel } from "../components/AlertsPanel";
+import { BackupPanel } from "../components/BackupPanel";
+import {
+  RANGES,
+  type IndexQuote,
+  type PriceAlert,
+  type PricePoint,
+  type Quote,
+  type RangeKey,
+} from "../types";
 
 export function DashboardPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
@@ -19,6 +28,7 @@ export function DashboardPage() {
   const [points, setPoints] = useState<PricePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -33,6 +43,15 @@ export function DashboardPage() {
 
       if (indexResult.status === "fulfilled") setIndices(indexResult.value);
       if (quoteResult.status === "fulfilled") setQuotes(quoteResult.value);
+
+      // Alerts are evaluated here because nothing runs while the app is
+      // closed on free hosting. See NIGHT-LOG for what background delivery
+      // would need.
+      try {
+        setAlerts((await api.checkAlerts()).alerts);
+      } catch {
+        // An alert check failing must not blank the dashboard.
+      }
 
       const failure = [indexResult, quoteResult].find((r) => r.status === "rejected");
       if (failure && failure.status === "rejected") {
@@ -106,6 +125,18 @@ export function DashboardPage() {
     }
   }
 
+  async function handleCreateAlert(ticker: string, direction: string, threshold: number) {
+    setAlerts(await api.createAlert(ticker, direction, threshold).then(() => api.getAlerts()));
+  }
+
+  async function handleDeleteAlert(id: string) {
+    setAlerts(await api.deleteAlert(id));
+  }
+
+  async function handleAcknowledgeAlert(id: string) {
+    setAlerts(await api.acknowledgeAlert(id));
+  }
+
   return (
     <section>
       <div className="page-header">
@@ -134,7 +165,10 @@ export function DashboardPage() {
         </div>
       )}
 
-      <h3 className="section-heading">Watchlist</h3>
+      <h3 className="section-heading">
+        Watchlist
+        <span className="section-note">Click any row for its full price chart</span>
+      </h3>
       <WatchlistPanel
         quotes={quotes}
         onSelect={showChart}
@@ -153,6 +187,24 @@ export function DashboardPage() {
           <p>Index data unavailable right now.</p>
         </div>
       )}
+
+      <h3 className="section-heading">
+        Price alerts
+        <span className="section-note">Checked whenever you open Vantage</span>
+      </h3>
+      <AlertsPanel
+        alerts={alerts}
+        quotes={quotes}
+        onCreate={handleCreateAlert}
+        onDelete={handleDeleteAlert}
+        onAcknowledge={handleAcknowledgeAlert}
+      />
+
+      <h3 className="section-heading">
+        Backup
+        <span className="section-note">Move your lists between devices</span>
+      </h3>
+      <BackupPanel />
 
       {chartSymbol && (
         <>

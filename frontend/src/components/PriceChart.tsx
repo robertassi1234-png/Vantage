@@ -126,8 +126,26 @@ export function PriceChart({ points, label, height = 300 }: Props) {
     labelIndices.push(lastIndex);
   }
 
+  const periodChange = first ? ((last - first) / first) * 100 : null;
+
   return (
     <div className="chart-wrap" ref={attachWrap}>
+      {periodChange !== null && (
+        <p className={`period-change tone-${rising ? "up" : "down"}`}>
+          <span className="period-change-value">
+            {periodChange >= 0 ? "+" : ""}
+            {periodChange.toFixed(2)}%
+          </span>
+          <span className="period-change-note">
+            {money(last - first) !== "0" && (
+              <>
+                {last - first >= 0 ? "+" : "−"}${Math.abs(last - first).toFixed(2)}{" "}
+              </>
+            )}
+            over this period
+          </span>
+        </p>
+      )}
       <svg
         className={`price-chart tone-${tone}`}
         width={width}

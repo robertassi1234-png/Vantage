@@ -18,6 +18,22 @@ CREATE TABLE IF NOT EXISTS watchlist (
     PRIMARY KEY (space_id, list_name, ticker)
 );
 
+-- Alerts belong to a space like watchlists do. `triggered_at` is set the first
+-- time the condition is met and stays set, so an alert fires once rather than
+-- every time the app is opened while the price sits past the threshold.
+CREATE TABLE IF NOT EXISTS alerts (
+    id TEXT PRIMARY KEY,
+    space_id TEXT NOT NULL DEFAULT 'default',
+    ticker TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    threshold REAL NOT NULL,
+    note TEXT,
+    created_at TEXT NOT NULL,
+    triggered_at TEXT,
+    triggered_price REAL,
+    acknowledged INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS fundamentals_cache (
     ticker TEXT PRIMARY KEY,
     data_json TEXT NOT NULL,

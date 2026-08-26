@@ -9,6 +9,10 @@ import type {
   SymbolMatch,
   ListName,
   WatchlistEntry,
+  PriceAlert,
+  AlertCheckResult,
+  WorkspaceExport,
+  ImportResult,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -123,6 +127,32 @@ export const api = {
     request<PriceHistory>(
       `/api/market/history/${encodeURIComponent(symbol)}?range=${range}`,
     ),
+
+  getAlerts: () => request<PriceAlert[]>("/api/alerts"),
+
+  createAlert: (ticker: string, direction: string, threshold: number, note?: string) =>
+    request<PriceAlert>("/api/alerts", {
+      method: "POST",
+      body: JSON.stringify({ ticker, direction, threshold, note: note ?? null }),
+    }),
+
+  deleteAlert: (id: string) =>
+    request<PriceAlert[]>(`/api/alerts/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  acknowledgeAlert: (id: string) =>
+    request<PriceAlert[]>(`/api/alerts/${encodeURIComponent(id)}/acknowledge`, {
+      method: "POST",
+    }),
+
+  checkAlerts: () => request<AlertCheckResult>("/api/alerts/check", { method: "POST" }),
+
+  exportWorkspace: () => request<WorkspaceExport>("/api/export"),
+
+  importWorkspace: (payload: WorkspaceExport, replace = false) =>
+    request<ImportResult>(`/api/import?replace=${replace}`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 
   getFedTimeline: () => request<FedStatement[]>("/api/fed/timeline"),
 

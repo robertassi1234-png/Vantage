@@ -131,12 +131,23 @@ export function ComparisonChart({ series, height = 320 }: Props) {
     <div className="comparison-chart">
       {/* A legend is the dependable identity channel; colour alone never is. */}
       <ul className="chart-legend">
-        {normalised.map((s, i) => (
-          <li key={s.symbol} className={`legend-item-inline series-${i + 1}`}>
-            <span className="legend-key" aria-hidden="true" />
-            <span className="legend-name">{s.symbol}</span>
-          </li>
-        ))}
+        {normalised.map((s, i) => {
+          // The last value is the change over the whole selected period, which
+          // is the number most readers actually want from a comparison.
+          const values = [...s.byDate.values()];
+          const change = values.length ? values[values.length - 1] : null;
+          return (
+            <li key={s.symbol} className={`legend-item-inline series-${i + 1}`}>
+              <span className="legend-key" aria-hidden="true" />
+              <span className="legend-name">{s.symbol}</span>
+              {change !== null && (
+                <span className={`legend-change ${change >= 0 ? "is-up" : "is-down"}`}>
+                  {pct(change)}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       <div className="chart-wrap" ref={attachWrap}>

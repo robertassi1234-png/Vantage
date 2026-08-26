@@ -40,6 +40,40 @@ export interface WatchlistEntry {
   note: string | null;
 }
 
+export type AlertDirection = "above" | "below";
+
+export interface PriceAlert {
+  id: string;
+  ticker: string;
+  direction: AlertDirection;
+  threshold: number;
+  note: string | null;
+  created_at: string;
+  triggered_at: string | null;
+  triggered_price: number | null;
+  acknowledged: boolean;
+}
+
+export interface AlertCheckResult {
+  fired: PriceAlert[];
+  alerts: PriceAlert[];
+  checked: number;
+  error: string | null;
+}
+
+export interface WorkspaceExport {
+  version: number;
+  exported_at: string;
+  lists: Record<string, { ticker: string; added_at?: string | null; note?: string | null }[]>;
+  alerts: { ticker: string; direction: string; threshold: number; note?: string | null }[];
+}
+
+export interface ImportResult {
+  added: Record<string, number>;
+  alerts_added: number;
+  skipped: string[];
+}
+
 export interface PricePoint {
   date: string;
   close: number;
