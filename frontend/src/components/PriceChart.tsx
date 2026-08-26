@@ -10,15 +10,16 @@ interface Props {
 const PAD = { top: 16, right: 64, bottom: 28, left: 8 };
 const Y_TICKS = 4;
 
-/** Round a raw axis step up to a clean 1 / 2 / 5 × 10^n value. */
-function niceStep(rawStep: number): number {
+/** Round a raw axis step up to a clean 1 / 2 / 5 × 10^n value. Exported for tests. */
+export function niceStep(rawStep: number): number {
   const magnitude = 10 ** Math.floor(Math.log10(rawStep));
   const normalized = rawStep / magnitude;
   const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
   return step * magnitude;
 }
 
-function axisTicks(min: number, max: number): number[] {
+/** Clean gridline values spanning [min, max]. Exported for tests. */
+export function axisTicks(min: number, max: number): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [min];
   const step = niceStep((max - min) / Y_TICKS);
   const start = Math.ceil(min / step) * step;
