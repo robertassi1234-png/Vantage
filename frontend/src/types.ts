@@ -24,6 +24,13 @@ export interface FundamentalsRow {
   error: string | null;
 }
 
+export interface SymbolMatch {
+  symbol: string;
+  name: string | null;
+  exchange: string | null;
+  currency: string | null;
+}
+
 export type Sentiment = "hawkish" | "dovish" | "neutral";
 
 export interface FedStatement {

@@ -39,12 +39,13 @@ export function FedTrackerPage() {
       const result = await api.refreshFedTimeline();
       setTimeline(result.timeline);
       if (result.added.length > 0) {
-        setNotice(`Added ${result.added.length} new statement(s).`);
-      } else {
-        setNotice("No new statements since last check.");
+        const n = result.added.length;
+        setNotice(`Added ${n} new statement${n === 1 ? "" : "s"}.`);
+      } else if (result.errors.length === 0) {
+        setNotice("You're up to date — no new statements since last check.");
       }
       if (result.errors.length > 0) {
-        setError(result.errors.join("; "));
+        setError(result.errors.join(" "));
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -67,15 +68,22 @@ export function FedTrackerPage() {
       </div>
 
       {notice && <p className="notice-line">{notice}</p>}
-      {error && <p className="error-line">{error}</p>}
+      {error && (
+        <div className="alert alert-error">
+          <p>{error}</p>
+        </div>
+      )}
 
       {loading ? (
         <p className="notice-line">Loading…</p>
       ) : timeline.length === 0 ? (
-        <p className="empty-state">
-          No statements cached yet. Click "Check for new statements" to fetch and summarize the
-          latest FOMC releases.
-        </p>
+        <div className="empty-state">
+          <p className="empty-title">No statements yet</p>
+          <p>
+            Click “Check for new statements” to pull the latest releases from
+            federalreserve.gov and summarize their tone.
+          </p>
+        </div>
       ) : (
         <ul className="fed-timeline">
           {timeline.map((item) => (

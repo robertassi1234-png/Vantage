@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 import { StockTable } from "../components/StockTable";
+import { TickerSearch } from "../components/TickerSearch";
 import type { FundamentalsRow } from "../types";
 
 export function ComparisonPage() {
   const [rows, setRows] = useState<FundamentalsRow[]>([]);
-  const [tickerInput, setTickerInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [waking, setWaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadFundamentals(refresh = false) {
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getFundamentals(refresh);
-      setRows(data);
+      setRows(await api.getFundamentals(refresh));
+      setWaking(false);
     } catch (e) {
+      if (e instanceof ApiError && e.isColdStart) setWaking(true);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -26,14 +28,10 @@ export function ComparisonPage() {
     loadFundamentals();
   }, []);
 
-  async function handleAdd(e: React.FormEvent) {
-    e.preventDefault();
-    const ticker = tickerInput.trim();
-    if (!ticker) return;
-    setTickerInput("");
+  async function handleAdd(symbol: string) {
     setError(null);
     try {
-      await api.addTicker(ticker);
+      await api.addTicker(symbol);
       await loadFundamentals();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -54,29 +52,36 @@ export function ComparisonPage() {
       <div className="page-header">
         <div>
           <h2>Stock Comparison</h2>
-          <p className="page-subtitle">Fundamentals for everything on your watchlist, side by side.</p>
+          <p className="page-subtitle">
+            Search a company by name or ticker, then compare the fundamentals side by side.
+          </p>
         </div>
         <button className="btn" onClick={() => loadFundamentals(true)} disabled={loading}>
           {loading && <span className="spinner" />}
-          {loading ? "Refreshing…" : "Refresh data"}
+          {loading ? "Loading…" : "Refresh data"}
         </button>
       </div>
 
-      <form className="add-ticker-form" onSubmit={handleAdd}>
-        <input
-          value={tickerInput}
-          onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
-          placeholder="Add ticker (e.g. AAPL)"
-          maxLength={10}
-        />
-        <button className="btn" type="submit">
-          Add
-        </button>
-      </form>
+      <TickerSearch onSelect={handleAdd} disabled={loading} />
 
-      {error && <p className="error-line">{error}</p>}
+      {error && (
+        <div className={`alert ${waking ? "alert-info" : "alert-error"}`}>
+          <p>{error}</p>
+          {waking && (
+            <button className="link-btn" onClick={() => loadFundamentals()}>
+              Try again
+            </button>
+          )}
+        </div>
+      )}
 
-      <StockTable rows={rows} onRemove={handleRemove} />
+      {loading && rows.length === 0 ? (
+        <div className="empty-state">
+          <p>Loading your watchlist…</p>
+        </div>
+      ) : (
+        <StockTable rows={rows} onRemove={handleRemove} />
+      )}
     </section>
   );
 }

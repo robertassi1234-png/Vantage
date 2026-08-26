@@ -1,41 +1,6 @@
 import { useMemo, useState } from "react";
+import { GROUPS, METRICS, PRIMARY_METRICS, type MetricDef } from "../metrics";
 import type { FundamentalsRow } from "../types";
-
-interface Column {
-  key: keyof FundamentalsRow;
-  label: string;
-  format?: (v: FundamentalsRow[keyof FundamentalsRow]) => string;
-  numeric?: boolean;
-}
-
-const fmtNum = (digits = 2) => (v: unknown) =>
-  typeof v === "number" ? v.toFixed(digits) : "—";
-
-const fmtPercent = (v: unknown) =>
-  typeof v === "number" ? `${(v * 100).toFixed(1)}%` : "—";
-
-const fmtBillions = (v: unknown) =>
-  typeof v === "number" ? `$${(v / 1e9).toFixed(1)}B` : "—";
-
-const COLUMNS: Column[] = [
-  { key: "ticker", label: "Ticker" },
-  { key: "companyName", label: "Company" },
-  { key: "price", label: "Price", format: fmtNum(2), numeric: true },
-  { key: "marketCap", label: "Market Cap", format: fmtBillions, numeric: true },
-  { key: "peRatio", label: "P/E", format: fmtNum(1), numeric: true },
-  { key: "pegRatio", label: "PEG", format: fmtNum(2), numeric: true },
-  { key: "evToEbitda", label: "EV/EBITDA", format: fmtNum(1), numeric: true },
-  { key: "priceToBook", label: "P/B", format: fmtNum(2), numeric: true },
-  { key: "priceToSales", label: "P/S", format: fmtNum(2), numeric: true },
-  { key: "debtToEquity", label: "Debt/Equity", format: fmtNum(2), numeric: true },
-  { key: "currentRatio", label: "Current Ratio", format: fmtNum(2), numeric: true },
-  { key: "revenueGrowth", label: "Revenue Growth", format: fmtPercent, numeric: true },
-  { key: "epsGrowth", label: "EPS Growth", format: fmtPercent, numeric: true },
-  { key: "netProfitMargin", label: "Net Margin", format: fmtPercent, numeric: true },
-  { key: "operatingMargin", label: "Operating Margin", format: fmtPercent, numeric: true },
-  { key: "returnOnEquity", label: "ROE", format: fmtPercent, numeric: true },
-  { key: "dividendYield", label: "Dividend Yield", format: fmtPercent, numeric: true },
-];
 
 interface Props {
   rows: FundamentalsRow[];
@@ -45,6 +10,18 @@ interface Props {
 export function StockTable({ rows, onRemove }: Props) {
   const [sortKey, setSortKey] = useState<keyof FundamentalsRow>("ticker");
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const [showAll, setShowAll] = useState(false);
+
+  const columns = showAll ? METRICS : PRIMARY_METRICS;
+
+  const visibleGroups = useMemo(
+    () =>
+      GROUPS.map((group) => ({
+        ...group,
+        span: columns.filter((c) => c.group === group.id).length,
+      })).filter((g) => g.span > 0),
+    [columns],
+  );
 
   const sorted = useMemo(() => {
     const copy = [...rows];
@@ -54,9 +31,7 @@ export function StockTable({ rows, onRemove }: Props) {
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
-      if (typeof av === "number" && typeof bv === "number") {
-        return (av - bv) * sortDir;
-      }
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * sortDir;
       return String(av).localeCompare(String(bv)) * sortDir;
     });
     return copy;
@@ -72,45 +47,81 @@ export function StockTable({ rows, onRemove }: Props) {
   }
 
   if (rows.length === 0) {
-    return <p className="empty-state">Add a ticker above to start comparing stocks.</p>;
+    return (
+      <div className="empty-state">
+        <p className="empty-title">No companies yet</p>
+        <p>
+          Search for a company above — by name or ticker — to see its fundamentals here.
+          Add two or more to compare them side by side.
+        </p>
+      </div>
+    );
   }
 
   return (
     <>
+      <div className="table-toolbar">
+        <button className="link-btn" onClick={() => setShowAll((s) => !s)}>
+          {showAll ? "Show key metrics only" : `Show all ${METRICS.length} metrics`}
+        </button>
+        <span className="toolbar-hint">
+          Click a heading to sort · hover one for what it means · scroll sideways for more
+        </span>
+      </div>
+
       <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {COLUMNS.map((col) => (
-              <th
-                key={col.key}
-                className={col.numeric ? "numeric" : ""}
-                onClick={() => toggleSort(col.key)}
-              >
-                {col.label}
-                {sortKey === col.key ? (sortDir === 1 ? " ▲" : " ▼") : ""}
-              </th>
-            ))}
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((row) => (
-            <tr key={row.ticker} className={row.error ? "row-error" : row.stale ? "row-stale" : ""}>
-              {COLUMNS.map((col) => (
-                <td key={col.key} className={col.numeric ? "numeric" : ""}>
-                  {col.format ? col.format(row[col.key]) : (row[col.key] as string) ?? "—"}
-                </td>
+        <table>
+          <thead>
+            <tr className="group-row">
+              <th className="sticky-col" />
+              {visibleGroups.map((group) => (
+                <th key={group.id} colSpan={group.span} className={`group-head group-${group.id}`}>
+                  {group.label}
+                </th>
               ))}
-              <td>
-                <button className="remove-btn" onClick={() => onRemove(row.ticker)} title="Remove">
-                  ✕
-                </button>
-              </td>
+              <th />
             </tr>
-          ))}
-        </tbody>
-      </table>
+            <tr>
+              <th className="sticky-col" onClick={() => toggleSort("ticker")}>
+                Ticker{sortKey === "ticker" ? (sortDir === 1 ? " ▲" : " ▼") : ""}
+              </th>
+              {columns.map((col) => (
+                <th
+                  key={col.key}
+                  className={col.group === "identity" && col.key === "companyName" ? "" : "numeric"}
+                  onClick={() => toggleSort(col.key)}
+                  title={`${col.plainLabel} — ${col.explanation}`}
+                >
+                  <span className="th-label">{col.label}</span>
+                  {sortKey === col.key ? (sortDir === 1 ? " ▲" : " ▼") : ""}
+                </th>
+              ))}
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row) => (
+              <tr key={row.ticker} className={row.error ? "row-error" : row.stale ? "row-stale" : ""}>
+                <td className="sticky-col ticker-cell">{row.ticker}</td>
+                {columns.map((col) => (
+                  <MetricCell key={col.key} col={col} row={row} />
+                ))}
+                <td>
+                  <button
+                    className="remove-btn"
+                    onClick={() => onRemove(row.ticker)}
+                    title={`Remove ${row.ticker}`}
+                    aria-label={`Remove ${row.ticker}`}
+                  >
+                    ✕
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {rows.some((r) => r.error) && (
         <div className="errors">
           {rows
@@ -122,8 +133,69 @@ export function StockTable({ rows, onRemove }: Props) {
             ))}
         </div>
       )}
-      </div>
-      <p className="table-hint">Scroll sideways for more metrics · click any column heading to sort</p>
+
+      <Legend />
     </>
+  );
+}
+
+function MetricCell({ col, row }: { col: MetricDef; row: FundamentalsRow }) {
+  const raw = row[col.key];
+  const isNameCell = col.key === "companyName" || col.key === "sector";
+  const band =
+    col.band && typeof raw === "number" && Number.isFinite(raw) ? col.band(raw) : null;
+
+  return (
+    <td className={`${isNameCell ? "" : "numeric"}${band ? ` band-${band}` : ""}`}>
+      {col.format(raw)}
+    </td>
+  );
+}
+
+function Legend() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="legend">
+      <button className="link-btn" onClick={() => setOpen((o) => !o)}>
+        {open ? "Hide" : "What do these numbers mean?"}
+      </button>
+
+      {open && (
+        <div className="legend-body">
+          <p className="legend-note">
+            Shading marks values that sit unusually{" "}
+            <span className="band-chip band-low">below</span> or{" "}
+            <span className="band-chip band-high">above</span> a broad market norm;{" "}
+            <span className="band-chip band-mid">typical</span> values are left plain. It
+            flags what's worth a second look — it is <strong>not</strong> a buy or sell
+            signal, and high is not the same as good. A high P/E is normal for a
+            fast-growing company and a low one can be a warning sign. These norms are
+            rough, market-wide rules of thumb, so compare companies within the same sector.
+          </p>
+
+          {GROUPS.map((group) => {
+            const items = METRICS.filter((m) => m.group === group.id && m.band);
+            if (items.length === 0) return null;
+            return (
+              <div key={group.id} className="legend-group">
+                <h4>{group.label}</h4>
+                <p className="legend-blurb">{group.blurb}</p>
+                <dl>
+                  {items.map((m) => (
+                    <div key={m.key} className="legend-item">
+                      <dt>
+                        {m.label} <span className="legend-plain">{m.plainLabel}</span>
+                      </dt>
+                      <dd>{m.explanation}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

@@ -4,10 +4,19 @@ from fastapi import APIRouter, HTTPException
 
 from app import db
 from app.config import settings
-from app.fmp_client import FMPError, fetch_fundamentals
+from app.fmp_client import FMPError, fetch_fundamentals, search_symbols
 from app.models import FundamentalsRow, TickerRequest
 
 router = APIRouter(prefix="/api", tags=["stocks"])
+
+
+@router.get("/search")
+async def search(q: str) -> list[dict]:
+    """Autocomplete for the add-ticker box: accepts a ticker or a company name."""
+    try:
+        return await search_symbols(q)
+    except FMPError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
 
 
 @router.get("/watchlist")

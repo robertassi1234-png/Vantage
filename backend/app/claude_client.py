@@ -49,11 +49,29 @@ def summarize_statement(statement_text: str) -> dict:
             messages=[{"role": "user", "content": truncated}],
         )
     except anthropic.AuthenticationError as e:
-        raise SummarizationError("Invalid Anthropic API key") from e
+        raise SummarizationError(
+            "Your Anthropic API key was rejected. Check ANTHROPIC_API_KEY in your "
+            "backend settings."
+        ) from e
     except anthropic.RateLimitError as e:
-        raise SummarizationError("Anthropic API rate limit reached") from e
+        raise SummarizationError(
+            "Anthropic rate limit reached. Wait a minute and try again."
+        ) from e
+    except anthropic.BadRequestError as e:
+        message = str(getattr(e, "message", "")) or str(e)
+        if "credit balance" in message.lower():
+            raise SummarizationError(
+                "Your Anthropic account is out of credit, so statements can't be "
+                "summarized. Add credit at console.anthropic.com under Plans & Billing, "
+                "then try again."
+            ) from e
+        raise SummarizationError(f"Anthropic rejected the request: {message}") from e
     except anthropic.APIStatusError as e:
         raise SummarizationError(f"Anthropic API error: {e.message}") from e
+    except anthropic.APIConnectionError as e:
+        raise SummarizationError(
+            "Couldn't reach the Anthropic API. Check your network and try again."
+        ) from e
 
     text = next((b.text for b in response.content if b.type == "text"), "")
     parsed = _extract_json(text)

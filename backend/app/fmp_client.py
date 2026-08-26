@@ -41,6 +41,60 @@ async def _get(client: httpx.AsyncClient, path: str, **params: str) -> list | di
     return data
 
 
+async def search_symbols(query: str, limit: int = 8) -> list[dict]:
+    """Look up tickers by symbol *or* company name.
+
+    Queries both FMP search endpoints and merges the results so that typing
+    either "AAPL" or "apple" finds Apple. Exact symbol matches rank first.
+    """
+    if not settings.fmp_api_key:
+        raise FMPError("FMP_API_KEY is not set")
+
+    query = query.strip()
+    if not query:
+        return []
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        by_symbol, by_name = await asyncio.gather(
+            _get(client, "search-symbol", query=query, limit=str(limit)),
+            _get(client, "search-name", query=query, limit=str(limit)),
+            return_exceptions=True,
+        )
+
+    results: dict[str, dict] = {}
+    for batch in (by_symbol, by_name):
+        if isinstance(batch, Exception) or not isinstance(batch, list):
+            continue
+        for item in batch:
+            symbol = (item or {}).get("symbol")
+            if not symbol or symbol in results:
+                continue
+            results[symbol] = {
+                "symbol": symbol,
+                "name": item.get("name"),
+                "exchange": item.get("exchange") or item.get("exchangeFullName"),
+                "currency": item.get("currency"),
+            }
+
+    if not results:
+        return []
+
+    upper = query.upper()
+
+    def rank(entry: dict) -> tuple:
+        symbol = entry["symbol"].upper()
+        name = (entry.get("name") or "").upper()
+        return (
+            symbol != upper,               # exact ticker match first
+            not symbol.startswith(upper),  # then ticker prefix
+            not name.startswith(upper),    # then company-name prefix
+            len(symbol),                   # prefer plain tickers over suffixed listings
+            symbol,
+        )
+
+    return sorted(results.values(), key=rank)[:limit]
+
+
 async def fetch_fundamentals(ticker: str) -> dict:
     """Fetch and combine the fundamentals we care about for one ticker."""
     if not settings.fmp_api_key:

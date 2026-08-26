@@ -22,8 +22,17 @@ async def refresh_fed_timeline(max_new: int = 5) -> dict:
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Failed to fetch Fed statements: {e}") from e
 
-    added = []
-    errors = []
+    added: list[str] = []
+    errors: list[str] = []
+
+    def record_error(message: str) -> None:
+        """Keep one copy of each distinct problem.
+
+        A single root cause (an expired key, no API credit) otherwise repeats
+        once per statement and buries the actual message.
+        """
+        if message not in errors:
+            errors.append(message)
 
     for ref in refs:
         if db.statement_exists(ref.id):
@@ -31,7 +40,7 @@ async def refresh_fed_timeline(max_new: int = 5) -> dict:
         try:
             text = await fetch_statement_text(ref.url)
             if not text:
-                errors.append(f"{ref.id}: no text extracted from page")
+                record_error(f"Couldn't read the text of the {ref.date} statement.")
                 continue
             summary = summarize_statement(text)
             db.save_fed_statement(
@@ -46,9 +55,9 @@ async def refresh_fed_timeline(max_new: int = 5) -> dict:
             )
             added.append(ref.id)
         except SummarizationError as e:
-            errors.append(f"{ref.id}: {e}")
+            record_error(str(e))
         except Exception as e:
-            errors.append(f"{ref.id}: {e}")
+            record_error(f"Couldn't process the {ref.date} statement: {e}")
 
     return {
         "added": added,

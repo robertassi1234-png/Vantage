@@ -21,6 +21,11 @@
   --neutral: #64748b;
   --neutral-soft: #eaedf2;
 
+  --band-low-bg: #eaf2fb;
+  --band-low-edge: #6aa5db;
+  --band-high-bg: #fdf1e3;
+  --band-high-edge: #dd9a4e;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -54,6 +59,11 @@
     --dovish-soft: rgba(52, 211, 153, 0.14);
     --neutral: #9aa4b8;
     --neutral-soft: rgba(154, 164, 184, 0.14);
+
+    --band-low-bg: rgba(96, 152, 214, 0.16);
+    --band-low-edge: #5f9ad6;
+    --band-high-bg: rgba(221, 154, 78, 0.16);
+    --band-high-edge: #d99a52;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-md: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
@@ -278,6 +288,151 @@ button {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+/* ---------- Ticker search ---------- */
+
+.ticker-search {
+  margin-bottom: 1.25rem;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  max-width: 420px;
+}
+
+.search-field input {
+  width: 100%;
+}
+
+.search-spinner {
+  position: absolute;
+  right: 0.7rem;
+  top: 50%;
+  margin-top: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+.search-results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.search-result {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+
+.search-result.highlighted {
+  background: var(--accent-soft);
+}
+
+.result-symbol {
+  font-weight: 700;
+  font-size: 0.85rem;
+  min-width: 58px;
+}
+
+.result-name {
+  flex: 1;
+  font-size: 0.83rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.result-exchange {
+  font-size: 0.68rem;
+  color: var(--muted-2);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Alerts ---------- */
+
+.alert {
+  padding: 0.75rem 0.95rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+.alert p {
+  margin: 0;
+}
+
+.alert-error {
+  background: var(--hawkish-soft);
+  border-color: color-mix(in srgb, var(--hawkish) 25%, transparent);
+  color: var(--hawkish);
+}
+
+.alert-info {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--text);
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-btn:hover {
+  color: var(--accent-hover);
+}
+
+/* ---------- Table toolbar ---------- */
+
+.table-toolbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-hint {
+  font-size: 0.78rem;
+  color: var(--muted-2);
+}
+
 /* ---------- Table ---------- */
 
 .table-wrap {
@@ -383,20 +538,175 @@ tr.row-error td {
   color: var(--hawkish);
 }
 
-.table-hint {
-  margin: 0.6rem 0 0;
-  font-size: 0.78rem;
+/* ---------- Grouped headers + range bands ---------- */
+
+.group-row th {
+  padding-top: 0.55rem;
+  padding-bottom: 0.35rem;
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
   color: var(--muted-2);
+}
+
+.group-row th.group-head {
+  border-left: 1px solid var(--border);
+}
+
+.group-row th.group-identity {
+  border-left: none;
+}
+
+.sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--surface-2);
+}
+
+tbody .sticky-col {
+  background: var(--surface);
+}
+
+tbody tr:nth-child(even) .sticky-col {
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+}
+
+tbody tr:hover .sticky-col {
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+}
+
+.ticker-cell {
+  font-weight: 700;
+}
+
+.th-label {
+  border-bottom: 1px dotted var(--muted-2);
+}
+
+/* Only outliers are tinted; a typical value stays plain so the eye goes
+   straight to what's unusual. Cool = below the norm, warm = above it. */
+td.band-low {
+  background: var(--band-low-bg);
+  box-shadow: inset 2px 0 0 var(--band-low-edge);
+}
+
+td.band-high {
+  background: var(--band-high-bg);
+  box-shadow: inset 2px 0 0 var(--band-high-edge);
+}
+
+.band-chip {
+  display: inline-block;
+  padding: 0.05rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.band-chip.band-low {
+  background: var(--band-low-bg);
+  box-shadow: inset 2px 0 0 var(--band-low-edge);
+  color: var(--text);
+}
+
+.band-chip.band-mid {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.band-chip.band-high {
+  background: var(--band-high-bg);
+  box-shadow: inset 2px 0 0 var(--band-high-edge);
+  color: var(--text);
+}
+
+/* ---------- Legend ---------- */
+
+.legend {
+  margin-top: 1rem;
+}
+
+.legend-body {
+  margin-top: 0.75rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.25rem;
+}
+
+.legend-note {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.legend-group + .legend-group {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.legend-group h4 {
+  margin: 0 0 0.15rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.legend-blurb {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--muted-2);
+}
+
+.legend-group dl {
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.legend-item dt {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.legend-plain {
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.legend-item dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--muted);
 }
 
 .empty-state {
   color: var(--muted);
-  padding: 2.5rem 1rem;
+  padding: 2.5rem 1.5rem;
   text-align: center;
   background: var(--surface);
   border: 1px dashed var(--border);
   border-radius: var(--radius-lg);
   font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.empty-state p {
+  margin: 0 auto;
+  max-width: 460px;
+}
+
+.empty-title {
+  font-weight: 700;
+  color: var(--text);
+  font-size: 1rem;
+  margin-bottom: 0.35rem !important;
 }
 
 .error-line {
