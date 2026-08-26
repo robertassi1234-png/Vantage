@@ -1,0 +1,166 @@
+import json
+import sqlite3
+from contextlib import contextmanager
+from datetime import datetime, timezone
+
+from app.config import settings
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS watchlist (
+    ticker TEXT PRIMARY KEY,
+    added_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fundamentals_cache (
+    ticker TEXT PRIMARY KEY,
+    data_json TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS fed_statements (
+    id TEXT PRIMARY KEY,
+    date TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    raw_text TEXT NOT NULL,
+    summary TEXT,
+    sentiment TEXT,
+    key_takeaways TEXT,
+    fetched_at TEXT NOT NULL
+);
+"""
+
+
+@contextmanager
+def get_conn():
+    conn = sqlite3.connect(settings.vantage_db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def init_db() -> None:
+    with get_conn() as conn:
+        conn.executescript(SCHEMA)
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+# --- watchlist ---
+
+def get_watchlist() -> list[str]:
+    with get_conn() as conn:
+        rows = conn.execute("SELECT ticker FROM watchlist ORDER BY added_at").fetchall()
+        return [r["ticker"] for r in rows]
+
+
+def add_to_watchlist(ticker: str) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO watchlist (ticker, added_at) VALUES (?, ?)",
+            (ticker, now_iso()),
+        )
+
+
+def remove_from_watchlist(ticker: str) -> None:
+    with get_conn() as conn:
+        conn.execute("DELETE FROM watchlist WHERE ticker = ?", (ticker,))
+        conn.execute("DELETE FROM fundamentals_cache WHERE ticker = ?", (ticker,))
+
+
+# --- fundamentals cache ---
+
+def get_cached_fundamentals(ticker: str) -> dict | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT data_json, fetched_at FROM fundamentals_cache WHERE ticker = ?",
+            (ticker,),
+        ).fetchone()
+        if not row:
+            return None
+        return {"data": json.loads(row["data_json"]), "fetched_at": row["fetched_at"]}
+
+
+def set_cached_fundamentals(ticker: str, data: dict) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO fundamentals_cache (ticker, data_json, fetched_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET data_json = excluded.data_json, fetched_at = excluded.fetched_at
+            """,
+            (ticker, json.dumps(data), now_iso()),
+        )
+
+
+# --- fed statements ---
+
+def get_fed_timeline(limit: int = 20) -> list[dict]:
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, date, title, url, summary, sentiment, key_takeaways, fetched_at "
+            "FROM fed_statements ORDER BY date DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["key_takeaways"] = json.loads(d["key_takeaways"]) if d["key_takeaways"] else []
+            results.append(d)
+        return results
+
+
+def get_latest_fed_statement_id() -> str | None:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM fed_statements ORDER BY date DESC LIMIT 1"
+        ).fetchone()
+        return row["id"] if row else None
+
+
+def statement_exists(statement_id: str) -> bool:
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM fed_statements WHERE id = ?", (statement_id,)
+        ).fetchone()
+        return row is not None
+
+
+def save_fed_statement(
+    statement_id: str,
+    date: str,
+    title: str,
+    url: str,
+    raw_text: str,
+    summary: str,
+    sentiment: str,
+    key_takeaways: list[str],
+) -> None:
+    with get_conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO fed_statements (id, date, title, url, raw_text, summary, sentiment, key_takeaways, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                summary = excluded.summary,
+                sentiment = excluded.sentiment,
+                key_takeaways = excluded.key_takeaways,
+                fetched_at = excluded.fetched_at
+            """,
+            (
+                statement_id,
+                date,
+                title,
+                url,
+                raw_text,
+                summary,
+                sentiment,
+                json.dumps(key_takeaways),
+                now_iso(),
+            ),
+        )
