@@ -3,7 +3,8 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 
 from app import db
-from app.fmp_client import RANGE_DAYS, FMPError, fetch_history, fetch_quotes
+from app.fmp_client import RANGE_DAYS, FMPError
+from app.market_data import fetch_history, fetch_quotes
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 

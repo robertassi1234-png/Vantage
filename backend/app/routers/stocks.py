@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app import db
 from app.config import settings
-from app.fmp_client import FMPError, fetch_fundamentals, search_symbols
+from app.fmp_client import FMPError
+from app.market_data import fetch_fundamentals, search_symbols
 from app.models import FundamentalsRow, NoteRequest, TickerRequest
 from app.space import current_space
 

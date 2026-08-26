@@ -62,9 +62,30 @@ npm run dev
 
 Open `http://localhost:5173`.
 
+## Where the data comes from
+
+| Data | Provider | Why |
+|---|---|---|
+| Quotes, price history, search | **Yahoo Finance**, falling back to FMP | No key and no published quota |
+| Fundamentals | **FMP** only | Yahoo's fundamentals need an authenticated crumb |
+| Fed statements | federalreserve.gov | Public RSS, no key |
+| Fed tone summaries | Claude Haiku | Needs Anthropic credit |
+
+Yahoo needs no signup: it's called over plain HTTPS, so there is nothing to
+configure. `PROVIDER_ORDER` controls preference — set it to `fmp` alone to turn
+Yahoo off entirely if it ever misbehaves.
+
+This is deliberately *not* the `yfinance` package. yfinance would work, but it
+pulls in pandas, numpy and curl_cffi (~250MB), which on a free instance means
+slower builds and another second or two of cold start. The two endpoints used
+here return plain JSON, so `httpx` is enough. The trade-off is that Yahoo's
+response shapes are undocumented and can change — hence the FMP fallback.
+
 ## Staying inside the FMP free tier
 
-The free plan allows **250 API calls/day**, so everything is cached in SQLite:
+Since Yahoo now serves quotes, history and search, FMP is only used for
+fundamentals (4 calls per ticker, cached 24h) and as a fallback. The free plan
+allows **250 API calls/day**, and everything is cached in SQLite:
 
 | Data | Cached for | Why |
 |---|---|---|
