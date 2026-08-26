@@ -1,13 +1,16 @@
-"""Thin client for the Financial Modeling Prep API (free tier).
+"""Thin client for the Financial Modeling Prep API.
 
-Docs: https://site.financialmodelingprep.com/developer/docs
+Uses the "stable" API (the legacy /api/v3/ endpoints were retired by FMP
+in August 2025). Docs: https://site.financialmodelingprep.com/developer/docs/stable
 """
+
+import asyncio
 
 import httpx
 
 from app.config import settings
 
-BASE_URL = "https://financialmodelingprep.com/api/v3"
+BASE_URL = "https://financialmodelingprep.com/stable"
 
 
 class FMPError(Exception):
@@ -22,10 +25,10 @@ def _first(items: list | dict | None) -> dict:
     return {}
 
 
-async def _get(client: httpx.AsyncClient, path: str) -> list | dict:
+async def _get(client: httpx.AsyncClient, path: str, **params: str) -> list | dict:
     resp = await client.get(
         f"{BASE_URL}/{path}",
-        params={"apikey": settings.fmp_api_key},
+        params={"apikey": settings.fmp_api_key, **params},
     )
     if resp.status_code == 401 or resp.status_code == 403:
         raise FMPError("FMP API key is missing or invalid")
@@ -55,31 +58,29 @@ async def fetch_fundamentals(ticker: str) -> dict:
         "sector": profile.get("sector"),
         "industry": profile.get("industry"),
         "price": profile.get("price"),
-        "marketCap": profile.get("mktCap"),
+        "marketCap": profile.get("marketCap"),
         "beta": profile.get("beta"),
-        "peRatio": ratios.get("peRatioTTM") or profile.get("pe"),
-        "pegRatio": ratios.get("pegRatioTTM"),
-        "evToEbitda": key_metrics.get("enterpriseValueOverEBITDATTM"),
+        "peRatio": ratios.get("priceToEarningsRatioTTM"),
+        "pegRatio": ratios.get("priceToEarningsGrowthRatioTTM"),
+        "evToEbitda": key_metrics.get("evToEBITDATTM"),
         "priceToBook": ratios.get("priceToBookRatioTTM"),
         "priceToSales": ratios.get("priceToSalesRatioTTM"),
-        "debtToEquity": ratios.get("debtEquityRatioTTM"),
+        "debtToEquity": ratios.get("debtToEquityRatioTTM"),
         "currentRatio": ratios.get("currentRatioTTM"),
         "revenueGrowth": growth.get("growthRevenue"),
         "epsGrowth": growth.get("growthEPS"),
         "netProfitMargin": ratios.get("netProfitMarginTTM"),
         "operatingMargin": ratios.get("operatingProfitMarginTTM"),
-        "returnOnEquity": ratios.get("returnOnEquityTTM"),
-        "dividendYield": ratios.get("dividendYielTTM") or ratios.get("dividendYieldTTM"),
+        "returnOnEquity": key_metrics.get("returnOnEquityTTM"),
+        "dividendYield": ratios.get("dividendYieldTTM"),
     }
 
 
 async def _gather(client: httpx.AsyncClient, ticker: str):
-    import asyncio
-
-    profile_task = _get(client, f"profile/{ticker}")
-    ratios_task = _get(client, f"ratios-ttm/{ticker}")
-    key_metrics_task = _get(client, f"key-metrics-ttm/{ticker}")
-    growth_task = _get(client, f"income-statement-growth/{ticker}?limit=1")
+    profile_task = _get(client, "profile", symbol=ticker)
+    ratios_task = _get(client, "ratios-ttm", symbol=ticker)
+    key_metrics_task = _get(client, "key-metrics-ttm", symbol=ticker)
+    growth_task = _get(client, "income-statement-growth", symbol=ticker, limit="1")
 
     profile, ratios, key_metrics, growth = await asyncio.gather(
         profile_task, ratios_task, key_metrics_task, growth_task
