@@ -28,22 +28,22 @@ async def _no_history(symbol, range_key):
 
 class TestWatchlistRoutes:
     def test_add_normalises_case_and_whitespace(self, client):
-        assert client.post("/api/watchlist", json={"ticker": " aapl "}).json() == ["AAPL"]
+        assert client.post("/api/lists/watch", json={"ticker": " aapl "}).json() == ["AAPL"]
 
     def test_blank_ticker_is_rejected(self, client):
-        assert client.post("/api/watchlist", json={"ticker": "   "}).status_code == 400
+        assert client.post("/api/lists/watch", json={"ticker": "   "}).status_code == 400
 
     def test_remove_is_case_insensitive(self, client):
-        client.post("/api/watchlist", json={"ticker": "AAPL"})
-        assert client.delete("/api/watchlist/aapl").json() == []
+        client.post("/api/lists/watch", json={"ticker": "AAPL"})
+        assert client.delete("/api/lists/watch/aapl").json() == []
 
     def test_removing_absent_ticker_is_a_no_op(self, client):
-        assert client.delete("/api/watchlist/GHOST").status_code == 200
+        assert client.delete("/api/lists/watch/GHOST").status_code == 200
 
 
 class TestFundamentalsRoute:
     def test_serves_from_cache_without_refetching(self, client, monkeypatch):
-        db.add_to_watchlist("AAPL")
+        db.add_to_watchlist("AAPL", list_name=db.COMPARE_LIST)
         db.set_cached_fundamentals("AAPL", FUNDAMENTALS)
 
         async def explode(ticker):
@@ -55,7 +55,7 @@ class TestFundamentalsRoute:
         assert row["stale"] is False
 
     def test_refresh_true_bypasses_the_cache(self, client, monkeypatch):
-        db.add_to_watchlist("AAPL")
+        db.add_to_watchlist("AAPL", list_name=db.COMPARE_LIST)
         db.set_cached_fundamentals("AAPL", FUNDAMENTALS)
         calls = []
 
@@ -69,7 +69,7 @@ class TestFundamentalsRoute:
         assert row["peRatio"] == 99.9
 
     def test_falls_back_to_stale_cache_when_upstream_fails(self, client, monkeypatch):
-        db.add_to_watchlist("AAPL")
+        db.add_to_watchlist("AAPL", list_name=db.COMPARE_LIST)
         db.set_cached_fundamentals("AAPL", FUNDAMENTALS)
 
         async def boom(ticker):
@@ -84,7 +84,7 @@ class TestFundamentalsRoute:
         assert "rate limited" in row["error"]
 
     def test_error_row_when_upstream_fails_with_no_cache(self, client, monkeypatch):
-        db.add_to_watchlist("AAPL")
+        db.add_to_watchlist("AAPL", list_name=db.COMPARE_LIST)
 
         async def boom(ticker):
             raise FMPError("bad key")

@@ -24,7 +24,7 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const watchlist = await api.getWatchlist();
+      const watchlist = await api.getList("watch");
       // Indices and quotes are independent; one failing shouldn't blank the other.
       const [indexResult, quoteResult] = await Promise.allSettled([
         api.getIndices(refresh),
@@ -88,7 +88,7 @@ export function DashboardPage() {
   async function handleAdd(symbol: string) {
     setError(null);
     try {
-      await api.addTicker(symbol);
+      await api.addToList("watch", symbol);
       await load();
       showChart(symbol, symbol);
     } catch (e) {
@@ -98,7 +98,7 @@ export function DashboardPage() {
 
   async function handleRemove(symbol: string) {
     try {
-      await api.removeTicker(symbol);
+      await api.removeFromList("watch", symbol);
       setQuotes((prev) => prev.filter((q) => q.symbol !== symbol));
       if (chartSymbol === symbol) setChartSymbol(null);
     } catch (e) {

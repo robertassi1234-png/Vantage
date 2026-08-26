@@ -49,7 +49,7 @@ describe("api request handling", () => {
 
   it("returns parsed JSON on success", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(["AAPL"])));
-    await expect(runWithTimers(() => api.getWatchlist())).resolves.toEqual(["AAPL"]);
+    await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
   });
 
   it("surfaces the server's detail message verbatim", async () => {
@@ -58,28 +58,28 @@ describe("api request handling", () => {
       vi.fn(async () => errorResponse(400, JSON.stringify({ detail: "Ticker cannot be empty" }))),
     );
 
-    await expect(runWithTimers(() => api.addTicker(""))).rejects.toThrow("Ticker cannot be empty");
+    await expect(runWithTimers(() => api.addToList("compare", ""))).rejects.toThrow("Ticker cannot be empty");
   });
 
   it("does not retry a real error response", async () => {
     const fetchMock = vi.fn(async () => errorResponse(404, JSON.stringify({ detail: "nope" })));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(runWithTimers(() => api.getWatchlist())).rejects.toThrow("nope");
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toThrow("nope");
     // A 404 is an answer, not a cold start -- retrying it just wastes time.
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("translates a bare gateway error into plain language", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => errorResponse(502, "upstream boom")));
-    await expect(runWithTimers(() => api.getWatchlist())).rejects.toThrow(
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toThrow(
       /temporarily unavailable/,
     );
   });
 
   it("translates an unlabelled status into a readable message", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => errorResponse(418, "not json at all")));
-    await expect(runWithTimers(() => api.getWatchlist())).rejects.toThrow(
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toThrow(
       /Something went wrong \(error 418\)/,
     );
   });
@@ -91,7 +91,7 @@ describe("api request handling", () => {
       .mockResolvedValueOnce(jsonResponse(["AAPL"]));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(runWithTimers(() => api.getWatchlist())).resolves.toEqual(["AAPL"]);
+    await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -99,7 +99,7 @@ describe("api request handling", () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
-    const error = await runWithTimers(() => api.getWatchlist()).catch((e) => e);
+    const error = await runWithTimers(() => api.getList("watch")).catch((e) => e);
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.isColdStart).toBe(true);

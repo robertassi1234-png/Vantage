@@ -11,10 +11,11 @@ SCHEMA = """
 -- shared cache means a second visitor costs no extra API calls.
 CREATE TABLE IF NOT EXISTS watchlist (
     space_id TEXT NOT NULL DEFAULT 'default',
+    list_name TEXT NOT NULL DEFAULT 'watch',
     ticker TEXT NOT NULL,
     added_at TEXT NOT NULL,
     note TEXT,
-    PRIMARY KEY (space_id, ticker)
+    PRIMARY KEY (space_id, list_name, ticker)
 );
 
 CREATE TABLE IF NOT EXISTS fundamentals_cache (
@@ -56,6 +57,13 @@ def get_conn():
 
 DEFAULT_SPACE = "default"
 
+# The watchlist is for following prices; the comparison list is for studying
+# fundamentals side by side. Keeping them apart means adding something to
+# glance at doesn't clutter the table you're analysing.
+WATCH_LIST = "watch"
+COMPARE_LIST = "compare"
+LIST_NAMES = (WATCH_LIST, COMPARE_LIST)
+
 
 def init_db() -> None:
     with get_conn() as conn:
@@ -82,6 +90,35 @@ def _migrate_watchlist_to_spaces(conn) -> None:
     if "note" not in columns:
         conn.execute("ALTER TABLE watchlist ADD COLUMN note TEXT")
 
+    if "list_name" not in columns:
+        # The table has to be rebuilt rather than altered: the primary key was
+        # (space_id, ticker), and ALTER TABLE ADD COLUMN cannot widen a primary
+        # key in SQLite. Adding the column alone would leave the old key in
+        # place and silently refuse to let a ticker exist in both lists.
+        conn.execute("ALTER TABLE watchlist RENAME TO watchlist_pre_lists")
+        conn.execute(
+            """
+            CREATE TABLE watchlist (
+                space_id TEXT NOT NULL DEFAULT 'default',
+                list_name TEXT NOT NULL DEFAULT 'watch',
+                ticker TEXT NOT NULL,
+                added_at TEXT NOT NULL,
+                note TEXT,
+                PRIMARY KEY (space_id, list_name, ticker)
+            )
+            """
+        )
+        # Whatever was saved before the split was serving both purposes.
+        for list_name in LIST_NAMES:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO watchlist (space_id, list_name, ticker, added_at, note)
+                SELECT space_id, ?, ticker, added_at, note FROM watchlist_pre_lists
+                """,
+                (list_name,),
+            )
+        conn.execute("DROP TABLE watchlist_pre_lists")
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -89,44 +126,58 @@ def now_iso() -> str:
 
 # --- watchlist ---
 
-def get_watchlist(space_id: str = DEFAULT_SPACE) -> list[str]:
+def get_watchlist(space_id: str = DEFAULT_SPACE, list_name: str = WATCH_LIST) -> list[str]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT ticker FROM watchlist WHERE space_id = ? ORDER BY added_at",
-            (space_id,),
+            "SELECT ticker FROM watchlist WHERE space_id = ? AND list_name = ? ORDER BY added_at",
+            (space_id, list_name),
         ).fetchall()
         return [r["ticker"] for r in rows]
 
 
-def get_watchlist_entries(space_id: str = DEFAULT_SPACE) -> list[dict]:
+def get_watchlist_entries(
+    space_id: str = DEFAULT_SPACE, list_name: str = WATCH_LIST
+) -> list[dict]:
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT ticker, added_at, note FROM watchlist WHERE space_id = ? ORDER BY added_at",
-            (space_id,),
+            "SELECT ticker, added_at, note FROM watchlist "
+            "WHERE space_id = ? AND list_name = ? ORDER BY added_at",
+            (space_id, list_name),
         ).fetchall()
         return [dict(r) for r in rows]
 
 
-def add_to_watchlist(ticker: str, space_id: str = DEFAULT_SPACE) -> None:
+def add_to_watchlist(
+    ticker: str, space_id: str = DEFAULT_SPACE, list_name: str = WATCH_LIST
+) -> None:
     with get_conn() as conn:
         conn.execute(
-            "INSERT OR IGNORE INTO watchlist (space_id, ticker, added_at) VALUES (?, ?, ?)",
-            (space_id, ticker, now_iso()),
+            "INSERT OR IGNORE INTO watchlist (space_id, list_name, ticker, added_at) "
+            "VALUES (?, ?, ?, ?)",
+            (space_id, list_name, ticker, now_iso()),
         )
 
 
-def set_watchlist_note(ticker: str, note: str | None, space_id: str = DEFAULT_SPACE) -> None:
+def set_watchlist_note(
+    ticker: str,
+    note: str | None,
+    space_id: str = DEFAULT_SPACE,
+    list_name: str = WATCH_LIST,
+) -> None:
     with get_conn() as conn:
         conn.execute(
-            "UPDATE watchlist SET note = ? WHERE space_id = ? AND ticker = ?",
-            (note or None, space_id, ticker),
+            "UPDATE watchlist SET note = ? WHERE space_id = ? AND list_name = ? AND ticker = ?",
+            (note or None, space_id, list_name, ticker),
         )
 
 
-def remove_from_watchlist(ticker: str, space_id: str = DEFAULT_SPACE) -> None:
+def remove_from_watchlist(
+    ticker: str, space_id: str = DEFAULT_SPACE, list_name: str = WATCH_LIST
+) -> None:
     with get_conn() as conn:
         conn.execute(
-            "DELETE FROM watchlist WHERE space_id = ? AND ticker = ?", (space_id, ticker)
+            "DELETE FROM watchlist WHERE space_id = ? AND list_name = ? AND ticker = ?",
+            (space_id, list_name, ticker),
         )
         # The fundamentals cache is deliberately global: the numbers are the
         # same for everyone, so one person removing a ticker must not throw

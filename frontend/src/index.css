@@ -679,6 +679,107 @@ button {
   color: var(--muted);
 }
 
+/* ---------- Comparison chart ----------
+   Categorical slots 1-5 from the validated data-viz palette. Both modes are
+   selected steps against their own surface, not an automatic flip. */
+
+.comparison-chart {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .comparison-chart {
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+  }
+}
+
+:root[data-theme="dark"] .comparison-chart {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+}
+
+.series-1 { --series: var(--series-1); }
+.series-2 { --series: var(--series-2); }
+.series-3 { --series: var(--series-3); }
+.series-4 { --series: var(--series-4); }
+.series-5 { --series: var(--series-5); }
+
+.comparison-chart .chart-line {
+  stroke: var(--series);
+}
+
+.comparison-chart .chart-end-dot {
+  fill: var(--series);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+/* Zero is the reference every series is measured from, so it reads slightly
+   stronger than the other gridlines. */
+.chart-baseline {
+  stroke: var(--muted-2);
+  stroke-width: 1;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+}
+
+.legend-item-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  /* Text keeps its own token; the coloured key beside it carries identity. */
+  color: var(--text);
+}
+
+.legend-key {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--series);
+  flex-shrink: 0;
+}
+
+.chart-tooltip-multi {
+  gap: 0.25rem;
+  min-width: 130px;
+}
+
+.tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+}
+
+.tooltip-symbol {
+  color: var(--muted);
+  flex: 1;
+}
+
+.chart-tooltip-multi .tooltip-value {
+  font-size: 0.78rem;
+}
+
 /* ---------- Footer ---------- */
 
 .app-footer {

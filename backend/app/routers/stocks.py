@@ -21,38 +21,51 @@ async def search(q: str) -> list[dict]:
         raise HTTPException(status_code=502, detail=str(e)) from e
 
 
-@router.get("/watchlist")
-def list_watchlist(space: str = Depends(current_space)) -> list[str]:
-    return db.get_watchlist(space)
+def _valid_list(list_name: str) -> str:
+    if list_name not in db.LIST_NAMES:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown list '{list_name}'. Use one of: {', '.join(db.LIST_NAMES)}.",
+        )
+    return list_name
 
 
-@router.get("/watchlist/entries")
-def list_watchlist_entries(space: str = Depends(current_space)) -> list[dict]:
-    """Watchlist with the date each ticker was added and any note on it."""
-    return db.get_watchlist_entries(space)
+@router.get("/lists/{list_name}")
+def get_list(list_name: str, space: str = Depends(current_space)) -> list[str]:
+    return db.get_watchlist(space, _valid_list(list_name))
 
 
-@router.post("/watchlist")
-def add_ticker(req: TickerRequest, space: str = Depends(current_space)) -> list[str]:
+@router.get("/lists/{list_name}/entries")
+def get_list_entries(list_name: str, space: str = Depends(current_space)) -> list[dict]:
+    """Tickers with the date each was added and any note on it."""
+    return db.get_watchlist_entries(space, _valid_list(list_name))
+
+
+@router.post("/lists/{list_name}")
+def add_to_list(
+    list_name: str, req: TickerRequest, space: str = Depends(current_space)
+) -> list[str]:
     ticker = req.ticker.strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker cannot be empty")
-    db.add_to_watchlist(ticker, space)
-    return db.get_watchlist(space)
+    db.add_to_watchlist(ticker, space, _valid_list(list_name))
+    return db.get_watchlist(space, list_name)
 
 
-@router.put("/watchlist/{ticker}/note")
+@router.put("/lists/{list_name}/{ticker}/note")
 def set_note(
-    ticker: str, req: NoteRequest, space: str = Depends(current_space)
+    list_name: str, ticker: str, req: NoteRequest, space: str = Depends(current_space)
 ) -> list[dict]:
-    db.set_watchlist_note(ticker.strip().upper(), req.note, space)
-    return db.get_watchlist_entries(space)
+    db.set_watchlist_note(ticker.strip().upper(), req.note, space, _valid_list(list_name))
+    return db.get_watchlist_entries(space, list_name)
 
 
-@router.delete("/watchlist/{ticker}")
-def remove_ticker(ticker: str, space: str = Depends(current_space)) -> list[str]:
-    db.remove_from_watchlist(ticker.strip().upper(), space)
-    return db.get_watchlist(space)
+@router.delete("/lists/{list_name}/{ticker}")
+def remove_from_list(
+    list_name: str, ticker: str, space: str = Depends(current_space)
+) -> list[str]:
+    db.remove_from_watchlist(ticker.strip().upper(), space, _valid_list(list_name))
+    return db.get_watchlist(space, list_name)
 
 
 def _is_stale(fetched_at: str) -> bool:
@@ -64,7 +77,8 @@ def _is_stale(fetched_at: str) -> bool:
 async def get_fundamentals(
     refresh: bool = False, space: str = Depends(current_space)
 ) -> list[FundamentalsRow]:
-    tickers = db.get_watchlist(space)
+    # Fundamentals are the comparison table's data, so they follow that list.
+    tickers = db.get_watchlist(space, db.COMPARE_LIST)
     results: list[FundamentalsRow] = []
 
     for ticker in tickers:

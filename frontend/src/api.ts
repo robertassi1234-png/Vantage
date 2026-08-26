@@ -7,6 +7,8 @@ import type {
   Quote,
   RangeKey,
   SymbolMatch,
+  ListName,
+  WatchlistEntry,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -82,17 +84,26 @@ export const api = {
   searchSymbols: (query: string) =>
     request<SymbolMatch[]>(`/api/search?q=${encodeURIComponent(query)}`),
 
-  getWatchlist: () => request<string[]>("/api/watchlist"),
+  getList: (list: ListName) => request<string[]>(`/api/lists/${list}`),
 
-  addTicker: (ticker: string) =>
-    request<string[]>("/api/watchlist", {
+  getListEntries: (list: ListName) =>
+    request<WatchlistEntry[]>(`/api/lists/${list}/entries`),
+
+  addToList: (list: ListName, ticker: string) =>
+    request<string[]>(`/api/lists/${list}`, {
       method: "POST",
       body: JSON.stringify({ ticker }),
     }),
 
-  removeTicker: (ticker: string) =>
-    request<string[]>(`/api/watchlist/${encodeURIComponent(ticker)}`, {
+  removeFromList: (list: ListName, ticker: string) =>
+    request<string[]>(`/api/lists/${list}/${encodeURIComponent(ticker)}`, {
       method: "DELETE",
+    }),
+
+  setNote: (list: ListName, ticker: string, note: string) =>
+    request<WatchlistEntry[]>(`/api/lists/${list}/${encodeURIComponent(ticker)}/note`, {
+      method: "PUT",
+      body: JSON.stringify({ note }),
     }),
 
   getFundamentals: (refresh = false) =>

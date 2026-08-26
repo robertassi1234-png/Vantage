@@ -31,6 +31,15 @@ export interface SymbolMatch {
   currency: string | null;
 }
 
+/** "watch" follows prices; "compare" is the fundamentals table. Independent. */
+export type ListName = "watch" | "compare";
+
+export interface WatchlistEntry {
+  ticker: string;
+  added_at: string;
+  note: string | null;
+}
+
 export interface PricePoint {
   date: string;
   close: number;
