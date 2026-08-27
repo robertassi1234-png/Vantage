@@ -55,18 +55,84 @@ function friendlyServerError(status: number, body: string): string {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Whether to send the session cookie.
+ *
+ * "include" is what accounts need. But a browser refuses outright to send a
+ * credentialed request to an API that answers with a wildcard origin, and it
+ * refuses the whole request, not just the cookie -- so a server configured
+ * that way would fail every call rather than just failing to sign anyone in.
+ * Dropping to "omit" there gives back the signed-out app, which is exactly
+ * what a wildcard server can offer.
+ */
+let credentials: RequestCredentials = "include";
+
+/** True once a credentialed request was refused and we fell back. */
+export function isAnonymousOnly(): boolean {
+  return credentials === "omit";
+}
+
+let probe: Promise<boolean> | null = null;
+
+/** Reset between tests; the mode is otherwise sticky for the page's life. */
+export function resetCredentialsMode(): void {
+  credentials = "include";
+  probe = null;
+}
+
+const reachable = async (mode: RequestCredentials) => {
+  try {
+    return (await fetch(`${BASE_URL}/api/health`, { credentials: mode })).ok;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Is the server up, and refusing us specifically because of the cookie?
+ *
+ * A CORS refusal, a sleeping instance and a flaky connection are all the same
+ * "Failed to fetch" to JavaScript, so the same health check is run both ways
+ * and the answers compared. Only "fails with the cookie, succeeds without it"
+ * means the cookie is the problem.
+ *
+ * Testing just the cookie-less call would be wrong: a single dropped request
+ * against a perfectly healthy server would look identical, and we would stop
+ * sending the session cookie for the rest of the visit -- quietly signing out
+ * someone who was signed in.
+ */
+function serverRefusesCredentials(): Promise<boolean> {
+  // The page loads several requests at once, and they fail together. Sharing
+  // one probe keeps that from becoming a burst of identical health checks.
+  probe ??= (async () => {
+    try {
+      const [withCookie, withoutCookie] = await Promise.all([
+        reachable("include"),
+        reachable("omit"),
+      ]);
+      return !withCookie && withoutCookie;
+    } finally {
+      // Cleared so a later failure -- a genuinely sleeping server, say -- is
+      // diagnosed afresh rather than reusing this answer.
+      setTimeout(() => {
+        probe = null;
+      }, 0);
+    }
+  })();
+  return probe;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   for (let attempt = 0; attempt <= COLD_START_RETRIES; attempt++) {
     try {
       const res = await fetch(`${BASE_URL}${path}`, {
         ...options,
-        // The session lives in an httpOnly cookie, which the browser only
-        // attaches cross-origin when the request asks for credentials.
-        credentials: "include",
+        credentials,
         headers: {
           "Content-Type": "application/json",
           // Scopes the watchlist to this browser so two people opening the
-          // same URL don't share one list.
+          // same URL don't share one list. This is what carries identity
+          // once the cookie has been ruled out.
           "X-Vantage-Space": getSpaceId(),
           ...options?.headers,
         },
@@ -77,9 +143,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       }
       return (await res.json()) as T;
     } catch (e) {
-      // A failed fetch (as opposed to an error response) means we never reached
-      // the server -- usually a sleeping free-tier instance waking up.
+      // A failed fetch (as opposed to an error response) means the response
+      // never arrived -- a sleeping instance, or a cookie the browser
+      // refused to send.
       if (e instanceof ApiError) throw e;
+
+      // Only on the first failure: on a sleeping server every attempt would
+      // otherwise carry a probe, doubling the requests in the common case.
+      if (attempt === 0 && credentials === "include") {
+        if (await serverRefusesCredentials()) {
+          credentials = "omit";
+          continue; // Retry immediately: the server is awake, not asleep.
+        }
+      }
+
       if (attempt < COLD_START_RETRIES) await sleep(COLD_START_DELAY_MS);
     }
   }
@@ -132,10 +209,14 @@ export const api = {
           `/api/market/quotes?symbols=${encodeURIComponent(symbols.join(","))}&refresh=${refresh}`,
         ),
 
-  getHistory: (symbol: string, range: RangeKey) =>
-    request<PriceHistory>(
+  getHistory: async (symbol: string, range: RangeKey) => {
+    const history = await request<PriceHistory>(
       `/api/market/history/${encodeURIComponent(symbol)}?range=${range}`,
-    ),
+    );
+    // A response missing its points used to reach the chart as undefined and
+    // take the whole page down with it. An empty chart is the honest result.
+    return { ...history, points: history?.points ?? [] };
+  },
 
   getAccount: () => request<Account>("/api/auth/me"),
 

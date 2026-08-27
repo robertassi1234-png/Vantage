@@ -1,4 +1,13 @@
+import re
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _normalise_origin(origin: str) -> str:
+    origin = origin.strip().rstrip("/")
+    if origin and "://" not in origin:
+        origin = f"https://{origin}"
+    return origin
 
 
 class Settings(BaseSettings):
@@ -37,23 +46,44 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        """Origins allowed to call the API.
+        """Exact origins allowed to call the API.
 
         A bare hostname is read as https, because that is what someone pastes
         when they copy their site's address out of a hosting dashboard.
+        Wildcard entries are handled by `cors_origin_regex` instead.
         """
         if self.cors_origins.strip() == "*":
             return ["*"]
 
         origins = []
         for origin in self.cors_origins.split(","):
-            origin = origin.strip().rstrip("/")
-            if not origin:
-                continue
-            if "://" not in origin:
-                origin = f"https://{origin}"
-            origins.append(origin)
+            origin = _normalise_origin(origin)
+            if origin and "*" not in origin:
+                origins.append(origin)
         return origins
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """Pattern for wildcard entries like `https://*.onrender.com`.
+
+        Hosting providers hand out generated subdomains, and a preview deploy
+        gets a different one each time. Matching a pattern keeps credentials
+        working there without opening the API to every origin on the internet,
+        which is what a bare `*` would do.
+        """
+        if self.cors_origins.strip() == "*":
+            return None
+
+        patterns = []
+        for origin in self.cors_origins.split(","):
+            origin = _normalise_origin(origin)
+            if not origin or "*" not in origin:
+                continue
+            # A `*` stands for one label, so `*.example.com` cannot also match
+            # `evil.com.example.com.attacker.net`.
+            patterns.append(re.escape(origin).replace(r"\*", r"[^./]+"))
+
+        return "|".join(patterns) if patterns else None
 
     @property
     def allows_credentialed_cors(self) -> bool:
@@ -64,6 +94,12 @@ class Settings(BaseSettings):
         combined: naming the site explicitly is what turns sign-in on.
         """
         return self.cors_origin_list != ["*"]
+
+    @property
+    def cors_summary(self) -> str:
+        """What the API will accept, for the boot log."""
+        named = self.cors_origin_list + ([self.cors_origin_regex] if self.cors_origin_regex else [])
+        return ", ".join(n for n in named if n) or "(none)"
 
 
 settings = Settings()

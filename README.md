@@ -174,10 +174,22 @@ out, so paste whatever they give you.
 Set `CORS_ORIGINS` to your frontend's exact address, e.g.
 `https://vantage-frontend.onrender.com`, and `APP_BASE_URL` to the same value.
 
+A wildcard subdomain works too, which is useful when a host generates the
+name or when preview deploys each get their own:
+
+```
+CORS_ORIGINS=https://*.onrender.com
+```
+
+The `*` stands for exactly one label, so `https://*.onrender.com` matches
+`https://vantage-abc.onrender.com` but not `https://onrender.com.evil.com`.
+
 This is not optional bookkeeping. Sessions live in a cookie, and allowing a
 cookie from *any* origin would let any website you visit read and change your
-watchlist. The app refuses to combine the two, so sign-in stays off until
-`CORS_ORIGINS` names a real address.
+watchlist — so browsers refuse the combination outright, and refuse the whole
+request rather than just the cookie. `CORS_ORIGINS=*` therefore means "no
+accounts here": the app notices, stops sending the cookie, and runs signed
+out. Naming your site is what turns sign-in on.
 
 `APP_BASE_URL` is where sign-in links point — the site's address, not the
 API's.

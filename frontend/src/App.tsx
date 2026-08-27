@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AccountProvider } from "./AccountContext";
 import { AccountMenu } from "./components/AccountMenu";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ComparisonPage } from "./pages/ComparisonPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FedTrackerPage } from "./pages/FedTrackerPage";
@@ -135,10 +136,14 @@ function App() {
       </header>
 
       <AccountProvider value={account}>
+        {/* Keyed by tab as well as identity so switching tabs clears a crash
+            rather than stranding the reader on the error screen. */}
         <main key={identity}>
-          {tab === "dashboard" && <DashboardPage />}
-          {tab === "comparison" && <ComparisonPage />}
-          {tab === "fed" && <FedTrackerPage />}
+          <ErrorBoundary key={tab}>
+            {tab === "dashboard" && <DashboardPage />}
+            {tab === "comparison" && <ComparisonPage />}
+            {tab === "fed" && <FedTrackerPage />}
+          </ErrorBoundary>
         </main>
       </AccountProvider>
 

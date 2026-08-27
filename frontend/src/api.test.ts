@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, api } from "./api";
+import { ApiError, api, isAnonymousOnly, resetCredentialsMode } from "./api";
 
 function jsonResponse(body: unknown, status = 200) {
   return {
@@ -45,6 +45,7 @@ describe("api request handling", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    resetCredentialsMode();
   });
 
   it("returns parsed JSON on success", async () => {
@@ -85,18 +86,27 @@ describe("api request handling", () => {
   });
 
   it("retries a network failure and succeeds on a later attempt", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(jsonResponse(["AAPL"]));
+    // Health checks are counted separately: a failure also triggers one
+    // diagnostic probe, which is not a retry of the request itself.
+    let listCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/api/health")) throw new TypeError("Failed to fetch");
+      listCalls += 1;
+      if (listCalls === 1) throw new TypeError("Failed to fetch");
+      return jsonResponse(["AAPL"]);
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(listCalls).toBe(2);
   });
 
   it("gives up after the retry budget and flags a cold start", async () => {
-    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    let listCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (!String(url).endsWith("/api/health")) listCalls += 1;
+      throw new TypeError("Failed to fetch");
+    });
     vi.stubGlobal("fetch", fetchMock);
 
     const error = await runWithTimers(() => api.getList("watch")).catch((e) => e);
@@ -105,7 +115,7 @@ describe("api request handling", () => {
     expect(error.isColdStart).toBe(true);
     expect(error.message).toMatch(/waking up/);
     // Initial attempt plus two retries.
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(listCalls).toBe(3);
   });
 });
 
@@ -149,5 +159,175 @@ describe("api url construction", () => {
     await runWithTimers(() => api.getQuotes(["AAPL", "MSFT"]));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toContain("AAPL%2CMSFT");
+  });
+});
+
+/**
+ * The regression these exist for: every request began sending
+ * `credentials: "include"` for the session cookie, and a browser refuses such
+ * a request outright when the API answers with a wildcard origin. It refuses
+ * the whole request, not just the cookie, so a server left on CORS_ORIGINS=*
+ * failed every single call and the app looked completely offline.
+ */
+describe("credentialed requests being refused", () => {
+  const corsBlocked = () => Promise.reject(new TypeError("Failed to fetch"));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetCredentialsMode();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetCredentialsMode();
+  });
+
+  it("sends the session cookie by default", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse(["AAPL"]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runWithTimers(() => api.getList("watch"));
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include" });
+  });
+
+  it("retries without the cookie when a live server refuses it", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") return corsBlocked();
+      if (url.endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse(["AAPL"]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
+    expect(isAnonymousOnly()).toBe(true);
+  });
+
+  it("stays without the cookie for later requests", async () => {
+    // Re-testing on every call would double the request count for the
+    // whole session.
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") return corsBlocked();
+      if (url.endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runWithTimers(() => api.getList("watch"));
+    fetchMock.mockClear();
+    await runWithTimers(() => api.getList("compare"));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "omit" });
+  });
+
+  it("does not fall back when the server is genuinely unreachable", async () => {
+    // A sleeping instance must still read as a cold start, not as a CORS
+    // problem -- otherwise the app silently drops the cookie for no reason.
+    vi.stubGlobal("fetch", vi.fn(corsBlocked));
+
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toThrow(/waking up/i);
+    expect(isAnonymousOnly()).toBe(false);
+  });
+
+  it("does not fall back on an error response", async () => {
+    // A 500 reached the server, so the cookie was accepted.
+    vi.stubGlobal("fetch", vi.fn(async () => errorResponse(500, "boom")));
+
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toBeInstanceOf(ApiError);
+    expect(isAnonymousOnly()).toBe(false);
+  });
+
+  it("probes once for a burst of simultaneous failures", async () => {
+    // The dashboard fires several requests at mount; they fail together.
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") return corsBlocked();
+      if (url.endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runWithTimers(() =>
+      Promise.all([api.getList("watch"), api.getList("compare"), api.getAlerts()]),
+    );
+
+    // One diagnosis, not one per request -- though it asks both ways.
+    const probes = fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/health"));
+    expect(probes).toHaveLength(2);
+  });
+
+  it("keeps the browser-space header, which is what identifies you without a cookie", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") return corsBlocked();
+      if (url.endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runWithTimers(() => api.getList("watch"));
+    const last = fetchMock.mock.calls[fetchMock.mock.calls.length - 1][1] as RequestInit;
+    expect((last.headers as Record<string, string>)["X-Vantage-Space"]).toBeTruthy();
+  });
+
+  it("still writes, not just reads, after falling back", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") return corsBlocked();
+      if (url.endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse(["AAPL"]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runWithTimers(() => api.addToList("watch", "AAPL"))).resolves.toEqual(["AAPL"]);
+  });
+});
+
+describe("telling a cookie problem apart from a flaky one", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetCredentialsMode();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetCredentialsMode();
+  });
+
+  it("keeps sending the cookie when one request just fell over", async () => {
+    // The bug this guards: probing only without the cookie makes a single
+    // dropped request against a healthy server look exactly like a CORS
+    // refusal, which would quietly sign out someone who was signed in.
+    let listCalls = 0;
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      listCalls += 1;
+      if (listCalls === 1) throw new TypeError("Failed to fetch");
+      return jsonResponse(["AAPL"]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
+    expect(isAnonymousOnly()).toBe(false);
+  });
+
+  it("falls back only when the cookie is what the server rejects", async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.credentials === "include") throw new TypeError("Failed to fetch");
+      if (String(url).endsWith("/api/health")) return jsonResponse({ status: "ok" });
+      return jsonResponse(["AAPL"]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(runWithTimers(() => api.getList("watch"))).resolves.toEqual(["AAPL"]);
+    expect(isAnonymousOnly()).toBe(true);
+  });
+
+  it("does not fall back when the whole server is down", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }));
+
+    await expect(runWithTimers(() => api.getList("watch"))).rejects.toThrow(/waking up/i);
+    expect(isAnonymousOnly()).toBe(false);
   });
 });

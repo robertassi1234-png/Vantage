@@ -11,20 +11,27 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title="Vantage", description="Personal stock research app")
 
-# Sessions ride in a cookie, and a cookie is only sent cross-origin when the
-# API allows credentials. Allowing them alongside a wildcard origin would let
-# any website read a signed-in reader's watchlist, so the wildcard keeps the
-# anonymous app working from anywhere and sign-in waits for a named origin.
+# Sessions ride in a cookie, and a browser only sends one cross-origin when
+# the API allows credentials. Allowing that alongside a wildcard origin would
+# let any website read a signed-in reader's watchlist, and browsers refuse the
+# combination outright -- a wildcard plus a credentialed request is blocked,
+# which takes down every call, not just sign-in. So the wildcard is treated as
+# "no accounts here", and the client falls back to sending no cookie.
 _credentialed = settings.allows_credentialed_cors
 if not _credentialed:
     log.warning(
-        "CORS_ORIGINS is '*', so signing in from another origin is disabled. "
-        "Set it to your site's address to enable accounts."
+        "CORS_ORIGINS is '*'. The app will work signed out, but accounts are "
+        "off: browsers refuse to send a session cookie to a wildcard origin. "
+        "Set CORS_ORIGINS to your site's address (e.g. "
+        "https://your-site.onrender.com) to enable sign-in."
     )
+else:
+    log.info("CORS: accepting credentialed requests from %s", settings.cors_summary)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=_credentialed,
     allow_methods=["*"],
     allow_headers=["*"],

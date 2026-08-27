@@ -4,6 +4,7 @@ The security properties are the point of these tests: a link works once, dies
 on time, and a stolen database yields nothing usable.
 """
 
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -286,3 +287,49 @@ class TestCorsOrigins:
         monkeypatch.setattr(settings, "cors_origins", "https://a.com, http://localhost:5173")
         assert settings.allows_credentialed_cors is True
         assert settings.cors_origin_list == ["https://a.com", "http://localhost:5173"]
+
+
+class TestCorsPatterns:
+    """Hosting providers hand out generated subdomains, and a preview deploy
+    gets a new one each time. A pattern keeps credentials working there
+    without opening the API to every origin on the internet."""
+
+    def test_a_wildcard_subdomain_becomes_a_pattern(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://*.onrender.com")
+        assert settings.cors_origin_regex == r"https://[^./]+\.onrender\.com"
+        assert settings.cors_origin_list == []
+        assert settings.allows_credentialed_cors is True
+
+    def test_a_pattern_matches_the_intended_host(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://*.onrender.com")
+        assert re.fullmatch(settings.cors_origin_regex, "https://vantage-abc.onrender.com")
+
+    def test_a_pattern_does_not_match_a_lookalike_domain(self, monkeypatch):
+        """`*` stands for one label, so it can't be walked past."""
+        monkeypatch.setattr(settings, "cors_origins", "https://*.onrender.com")
+        pattern = settings.cors_origin_regex
+
+        for hostile in (
+            "https://evil.com/x.onrender.com",
+            "https://a.b.onrender.com.attacker.net",
+            "https://onrender.com.evil.com",
+            "http://vantage.onrender.com",
+        ):
+            assert not re.fullmatch(pattern, hostile), hostile
+
+    def test_exact_and_pattern_origins_can_be_mixed(self, monkeypatch):
+        monkeypatch.setattr(
+            settings, "cors_origins", "https://*.onrender.com, http://localhost:5173"
+        )
+        assert settings.cors_origin_list == ["http://localhost:5173"]
+        assert settings.cors_origin_regex == r"https://[^./]+\.onrender\.com"
+
+    def test_a_bare_wildcard_is_not_turned_into_a_pattern(self, monkeypatch):
+        """`*` alone means "no accounts", not "match everything with cookies"."""
+        monkeypatch.setattr(settings, "cors_origins", "*")
+        assert settings.cors_origin_regex is None
+        assert settings.allows_credentialed_cors is False
+
+    def test_no_pattern_when_none_was_given(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://vantage.example.com")
+        assert settings.cors_origin_regex is None

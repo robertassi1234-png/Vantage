@@ -1926,3 +1926,52 @@ td.band-high {
   align-self: flex-start;
   margin-top: auto;
 }
+
+/* --- crash screen ------------------------------------------------------ */
+
+.crash {
+  max-width: 34rem;
+  margin: 3rem auto;
+  padding: 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+
+.crash h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.crash p {
+  margin: 0 0 1.25rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.crash-actions {
+  margin-bottom: 1.5rem;
+}
+
+.crash details {
+  text-align: left;
+  color: var(--muted-2);
+  font-size: 0.78rem;
+}
+
+.crash summary {
+  cursor: pointer;
+}
+
+.crash pre {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
