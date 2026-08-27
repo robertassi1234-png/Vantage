@@ -1,25 +1,31 @@
 from datetime import datetime, timedelta, timezone
 
 from app import db
+from app.engine import connect, q
+
+OWNER = db.DEFAULT_OWNER
 
 
 def backdate_market_cache(key: str, seconds: int) -> None:
     """Rewrite a cache row's timestamp so TTL behaviour can be tested without sleeping."""
     stale = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
-    with db.get_conn() as conn:
-        conn.execute("UPDATE market_cache SET fetched_at = ? WHERE cache_key = ?", (stale, key))
+    with connect() as conn:
+        conn.execute(
+            q("UPDATE market_cache SET fetched_at = :f WHERE cache_key = :k"),
+            {"f": stale, "k": key},
+        )
 
 
 class TestWatchlist:
     def test_add_and_list(self):
-        db.add_to_watchlist("AAPL")
-        db.add_to_watchlist("MSFT")
-        assert db.get_watchlist() == ["AAPL", "MSFT"]
+        db.add_to_watchlist("AAPL", OWNER)
+        db.add_to_watchlist("MSFT", OWNER)
+        assert db.get_watchlist(OWNER) == ["AAPL", "MSFT"]
 
     def test_adding_twice_does_not_duplicate(self):
-        db.add_to_watchlist("AAPL")
-        db.add_to_watchlist("AAPL")
-        assert db.get_watchlist() == ["AAPL"]
+        db.add_to_watchlist("AAPL", OWNER)
+        db.add_to_watchlist("AAPL", OWNER)
+        assert db.get_watchlist(OWNER) == ["AAPL"]
 
     def test_remove_keeps_the_shared_fundamentals_cache(self):
         """Removing a ticker must not evict data other watchlists still use.
@@ -30,11 +36,11 @@ class TestWatchlist:
         removal would let one person cost everyone else four API calls out of
         a 250-a-day budget.
         """
-        db.add_to_watchlist("AAPL")
+        db.add_to_watchlist("AAPL", OWNER)
         db.set_cached_fundamentals("AAPL", {"ticker": "AAPL"})
-        db.remove_from_watchlist("AAPL")
+        db.remove_from_watchlist("AAPL", OWNER)
 
-        assert db.get_watchlist() == []
+        assert db.get_watchlist(OWNER) == []
         assert db.get_cached_fundamentals("AAPL") is not None
 
 

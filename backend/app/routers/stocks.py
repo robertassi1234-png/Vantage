@@ -7,7 +7,7 @@ from app.config import settings
 from app.fmp_client import FMPError
 from app.market_data import fetch_fundamentals, search_symbols
 from app.models import FundamentalsRow, NoteRequest, TickerRequest
-from app.space import current_space
+from app.space import current_owner
 
 router = APIRouter(prefix="/api", tags=["stocks"])
 
@@ -31,41 +31,41 @@ def _valid_list(list_name: str) -> str:
 
 
 @router.get("/lists/{list_name}")
-def get_list(list_name: str, space: str = Depends(current_space)) -> list[str]:
-    return db.get_watchlist(space, _valid_list(list_name))
+def get_list(list_name: str, owner: str = Depends(current_owner)) -> list[str]:
+    return db.get_watchlist(owner, _valid_list(list_name))
 
 
 @router.get("/lists/{list_name}/entries")
-def get_list_entries(list_name: str, space: str = Depends(current_space)) -> list[dict]:
+def get_list_entries(list_name: str, owner: str = Depends(current_owner)) -> list[dict]:
     """Tickers with the date each was added and any note on it."""
-    return db.get_watchlist_entries(space, _valid_list(list_name))
+    return db.get_watchlist_entries(owner, _valid_list(list_name))
 
 
 @router.post("/lists/{list_name}")
 def add_to_list(
-    list_name: str, req: TickerRequest, space: str = Depends(current_space)
+    list_name: str, req: TickerRequest, owner: str = Depends(current_owner)
 ) -> list[str]:
     ticker = req.ticker.strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker cannot be empty")
-    db.add_to_watchlist(ticker, space, _valid_list(list_name))
-    return db.get_watchlist(space, list_name)
+    db.add_to_watchlist(ticker, owner, _valid_list(list_name))
+    return db.get_watchlist(owner, list_name)
 
 
 @router.put("/lists/{list_name}/{ticker}/note")
 def set_note(
-    list_name: str, ticker: str, req: NoteRequest, space: str = Depends(current_space)
+    list_name: str, ticker: str, req: NoteRequest, owner: str = Depends(current_owner)
 ) -> list[dict]:
-    db.set_watchlist_note(ticker.strip().upper(), req.note, space, _valid_list(list_name))
-    return db.get_watchlist_entries(space, list_name)
+    db.set_watchlist_note(ticker.strip().upper(), req.note, owner, _valid_list(list_name))
+    return db.get_watchlist_entries(owner, list_name)
 
 
 @router.delete("/lists/{list_name}/{ticker}")
 def remove_from_list(
-    list_name: str, ticker: str, space: str = Depends(current_space)
+    list_name: str, ticker: str, owner: str = Depends(current_owner)
 ) -> list[str]:
-    db.remove_from_watchlist(ticker.strip().upper(), space, _valid_list(list_name))
-    return db.get_watchlist(space, list_name)
+    db.remove_from_watchlist(ticker.strip().upper(), owner, _valid_list(list_name))
+    return db.get_watchlist(owner, list_name)
 
 
 def _is_stale(fetched_at: str) -> bool:
@@ -75,10 +75,10 @@ def _is_stale(fetched_at: str) -> bool:
 
 @router.get("/fundamentals")
 async def get_fundamentals(
-    refresh: bool = False, space: str = Depends(current_space)
+    refresh: bool = False, owner: str = Depends(current_owner)
 ) -> list[FundamentalsRow]:
     # Fundamentals are the comparison table's data, so they follow that list.
-    tickers = db.get_watchlist(space, db.COMPARE_LIST)
+    tickers = db.get_watchlist(owner, db.COMPARE_LIST)
     results: list[FundamentalsRow] = []
 
     for ticker in tickers:

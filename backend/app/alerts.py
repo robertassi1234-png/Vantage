@@ -17,6 +17,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app import db
+from app.engine import connect, q
 
 ABOVE = "above"
 BELOW = "below"
@@ -28,7 +29,7 @@ class AlertError(Exception):
 
 
 def create_alert(
-    space_id: str, ticker: str, direction: str, threshold: float, note: str | None = None
+    owner_id: str, ticker: str, direction: str, threshold: float, note: str | None = None
 ) -> dict:
     direction = direction.strip().lower()
     if direction not in DIRECTIONS:
@@ -41,59 +42,76 @@ def create_alert(
         raise AlertError("Ticker cannot be empty.")
 
     alert_id = uuid.uuid4().hex
-    with db.get_conn() as conn:
+    with connect() as conn:
         conn.execute(
-            """
-            INSERT INTO alerts (id, space_id, ticker, direction, threshold, note, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (alert_id, space_id, ticker, direction, float(threshold), note or None, db.now_iso()),
+            q(
+                "INSERT INTO alerts "
+                "(id, owner_id, ticker, direction, threshold, note, created_at) "
+                "VALUES (:i, :o, :t, :d, :th, :n, :c)"
+            ),
+            {
+                "i": alert_id,
+                "o": owner_id,
+                "t": ticker,
+                "d": direction,
+                "th": float(threshold),
+                "n": note or None,
+                "c": db.now_iso(),
+            },
         )
-    return get_alert(space_id, alert_id)
+    return get_alert(owner_id, alert_id)
 
 
-def get_alert(space_id: str, alert_id: str) -> dict | None:
-    with db.get_conn() as conn:
+def get_alert(owner_id: str, alert_id: str) -> dict | None:
+    with connect() as conn:
         row = conn.execute(
-            "SELECT * FROM alerts WHERE space_id = ? AND id = ?", (space_id, alert_id)
-        ).fetchone()
+            q("SELECT * FROM alerts WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": alert_id},
+        ).mappings().first()
         return _row_to_alert(row) if row else None
 
 
-def list_alerts(space_id: str) -> list[dict]:
-    with db.get_conn() as conn:
+def list_alerts(owner_id: str) -> list[dict]:
+    with connect() as conn:
         rows = conn.execute(
-            "SELECT * FROM alerts WHERE space_id = ? ORDER BY created_at DESC", (space_id,)
-        ).fetchall()
+            q("SELECT * FROM alerts WHERE owner_id = :o ORDER BY created_at DESC"),
+            {"o": owner_id},
+        ).mappings()
         return [_row_to_alert(r) for r in rows]
 
 
-def delete_alert(space_id: str, alert_id: str) -> None:
-    with db.get_conn() as conn:
-        conn.execute("DELETE FROM alerts WHERE space_id = ? AND id = ?", (space_id, alert_id))
-
-
-def acknowledge_alert(space_id: str, alert_id: str) -> dict | None:
-    """Mark a fired alert as seen so it stops being surfaced."""
-    with db.get_conn() as conn:
+def delete_alert(owner_id: str, alert_id: str) -> None:
+    with connect() as conn:
         conn.execute(
-            "UPDATE alerts SET acknowledged = 1 WHERE space_id = ? AND id = ?",
-            (space_id, alert_id),
+            q("DELETE FROM alerts WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": alert_id},
         )
-    return get_alert(space_id, alert_id)
 
 
-def alert_tickers(space_id: str) -> list[str]:
+def acknowledge_alert(owner_id: str, alert_id: str) -> dict | None:
+    """Mark a fired alert as seen so it stops being surfaced."""
+    with connect() as conn:
+        conn.execute(
+            q("UPDATE alerts SET acknowledged = 1 WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": alert_id},
+        )
+    return get_alert(owner_id, alert_id)
+
+
+def alert_tickers(owner_id: str) -> list[str]:
     """Distinct tickers with an untriggered alert, so quotes can be fetched."""
-    with db.get_conn() as conn:
+    with connect() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT ticker FROM alerts WHERE space_id = ? AND triggered_at IS NULL",
-            (space_id,),
-        ).fetchall()
+            q(
+                "SELECT DISTINCT ticker FROM alerts "
+                "WHERE owner_id = :o AND triggered_at IS NULL"
+            ),
+            {"o": owner_id},
+        ).mappings()
         return [r["ticker"] for r in rows]
 
 
-def evaluate(space_id: str, prices: dict[str, float]) -> list[dict]:
+def evaluate(owner_id: str, prices: dict[str, float]) -> list[dict]:
     """Fire any alert whose condition the supplied prices now satisfy.
 
     `prices` maps ticker to last price. Returns the alerts that fired on this
@@ -102,10 +120,11 @@ def evaluate(space_id: str, prices: dict[str, float]) -> list[dict]:
     fired: list[dict] = []
     now = db.now_iso()
 
-    with db.get_conn() as conn:
+    with connect() as conn:
         pending = conn.execute(
-            "SELECT * FROM alerts WHERE space_id = ? AND triggered_at IS NULL", (space_id,)
-        ).fetchall()
+            q("SELECT * FROM alerts WHERE owner_id = :o AND triggered_at IS NULL"),
+            {"o": owner_id},
+        ).mappings().all()
 
         for row in pending:
             price = prices.get(row["ticker"])
@@ -121,14 +140,34 @@ def evaluate(space_id: str, prices: dict[str, float]) -> list[dict]:
                 continue
 
             conn.execute(
-                "UPDATE alerts SET triggered_at = ?, triggered_price = ? WHERE id = ?",
-                (now, float(price), row["id"]),
+                q(
+                    "UPDATE alerts SET triggered_at = :t, triggered_price = :p WHERE id = :i"
+                ),
+                {"t": now, "p": float(price), "i": row["id"]},
             )
             alert = _row_to_alert(row)
             alert.update(triggered_at=now, triggered_price=float(price))
             fired.append(alert)
 
     return fired
+
+
+def mark_notified(alert_id: str) -> None:
+    """Stamp an alert as emailed, so a retry of the sweep can't mail it twice."""
+    with connect() as conn:
+        conn.execute(
+            q("UPDATE alerts SET notified_at = :t WHERE id = :i"),
+            {"t": db.now_iso(), "i": alert_id},
+        )
+
+
+def pending_owners() -> list[str]:
+    """Every owner with an untriggered alert, for the scheduled sweep."""
+    with connect() as conn:
+        rows = conn.execute(
+            q("SELECT DISTINCT owner_id FROM alerts WHERE triggered_at IS NULL")
+        ).mappings()
+        return [r["owner_id"] for r in rows]
 
 
 def _row_to_alert(row) -> dict:
@@ -142,6 +181,7 @@ def _row_to_alert(row) -> dict:
         "triggered_at": row["triggered_at"],
         "triggered_price": row["triggered_price"],
         "acknowledged": bool(row["acknowledged"]),
+        "notified_at": row["notified_at"] if "notified_at" in row.keys() else None,
     }
 
 

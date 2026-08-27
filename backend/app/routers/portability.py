@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app import alerts as alerts_module
 from app import db
-from app.space import current_space
+from app.space import current_owner
 
 router = APIRouter(prefix="/api", tags=["portability"])
 
@@ -45,11 +45,11 @@ class ImportResult(BaseModel):
 
 
 @router.get("/export")
-def export_workspace(space: str = Depends(current_space)) -> WorkspaceExport:
+def export_workspace(owner: str = Depends(current_owner)) -> WorkspaceExport:
     return WorkspaceExport(
         exported_at=db.now_iso(),
         lists={
-            name: [ExportedEntry(**entry) for entry in db.get_watchlist_entries(space, name)]
+            name: [ExportedEntry(**entry) for entry in db.get_watchlist_entries(owner, name)]
             for name in db.LIST_NAMES
         },
         alerts=[
@@ -59,14 +59,14 @@ def export_workspace(space: str = Depends(current_space)) -> WorkspaceExport:
                 threshold=a["threshold"],
                 note=a["note"],
             )
-            for a in alerts_module.list_alerts(space)
+            for a in alerts_module.list_alerts(owner)
         ],
     )
 
 
 @router.post("/import")
 def import_workspace(
-    payload: WorkspaceExport, replace: bool = False, space: str = Depends(current_space)
+    payload: WorkspaceExport, replace: bool = False, owner: str = Depends(current_owner)
 ) -> ImportResult:
     """Merge an exported workspace into this space.
 
@@ -88,22 +88,22 @@ def import_workspace(
 
     if replace:
         for name in db.LIST_NAMES:
-            for ticker in db.get_watchlist(space, name):
-                db.remove_from_watchlist(ticker, space, name)
+            for ticker in db.get_watchlist(owner, name):
+                db.remove_from_watchlist(ticker, owner, name)
 
     for list_name, entries in payload.lists.items():
         if list_name not in db.LIST_NAMES:
             skipped.append(f"unknown list '{list_name}'")
             continue
 
-        existing = set(db.get_watchlist(space, list_name))
+        existing = set(db.get_watchlist(owner, list_name))
         for entry in entries:
             ticker = entry.ticker.strip().upper()
             if not ticker or ticker in existing:
                 continue
-            db.add_to_watchlist(ticker, space, list_name)
+            db.add_to_watchlist(ticker, owner, list_name)
             if entry.note:
-                db.set_watchlist_note(ticker, entry.note, space, list_name)
+                db.set_watchlist_note(ticker, entry.note, owner, list_name)
             added[list_name] += 1
             existing.add(ticker)
 
@@ -111,7 +111,7 @@ def import_workspace(
     for alert in payload.alerts:
         try:
             alerts_module.create_alert(
-                space, alert.ticker, alert.direction, alert.threshold, alert.note
+                owner, alert.ticker, alert.direction, alert.threshold, alert.note
             )
             alerts_added += 1
         except alerts_module.AlertError as e:

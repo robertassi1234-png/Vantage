@@ -1,6 +1,6 @@
 import pytest
 
-from app import db
+from app import db, engine
 from app.config import settings
 
 
@@ -8,12 +8,15 @@ from app.config import settings
 def isolated_db(tmp_path, monkeypatch):
     """Point every test at its own throwaway SQLite file.
 
-    `db.get_conn` reads the path from settings on each call, so overriding the
-    attribute is enough to redirect the whole module.
+    The engine is cached per process, so it has to be dropped on both sides of
+    the test: once so this case builds an engine for its own file, and again so
+    the next case isn't handed this one.
     """
-    monkeypatch.setattr(settings, "vantage_db_path", str(tmp_path / "test.db"))
+    monkeypatch.setattr(settings, "database_url", f"sqlite:///{tmp_path / 'test.db'}")
+    engine.reset_engine()
     db.init_db()
     yield
+    engine.reset_engine()
 
 
 @pytest.fixture(autouse=True)

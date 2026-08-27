@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from app import alerts as alerts_module
 from app.fmp_client import FMPError
 from app.main import app
-from app.routers import alerts as alerts_router
+from app import notifier
 
 ALICE = {"X-Vantage-Space": "alice-abc123"}
 BOB = {"X-Vantage-Space": "bob-xyz789"}
@@ -119,9 +119,9 @@ class TestCheckRoute:
         async def explode(symbols):
             raise AssertionError("should not fetch quotes with nothing pending")
 
-        monkeypatch.setattr(alerts_router, "fetch_quotes", explode)
+        monkeypatch.setattr(notifier, "fetch_quotes", explode)
         body = client.post("/api/alerts/check", headers=ALICE).json()
-        assert body == {"fired": [], "alerts": [], "checked": 0, "error": None}
+        assert body == {"fired": [], "alerts": [], "checked": 0, "emailed": 0, "error": None}
 
     def test_a_crossed_alert_fires(self, client, monkeypatch):
         make(client, threshold=320)
@@ -129,7 +129,7 @@ class TestCheckRoute:
         async def quotes(symbols):
             return [{"symbol": "AAPL", "price": 330.0}]
 
-        monkeypatch.setattr(alerts_router, "fetch_quotes", quotes)
+        monkeypatch.setattr(notifier, "fetch_quotes", quotes)
         body = client.post("/api/alerts/check", headers=ALICE).json()
 
         assert [a["ticker"] for a in body["fired"]] == ["AAPL"]
@@ -141,7 +141,7 @@ class TestCheckRoute:
         async def quotes(symbols):
             return [{"symbol": "AAPL", "price": 310.0}]
 
-        monkeypatch.setattr(alerts_router, "fetch_quotes", quotes)
+        monkeypatch.setattr(notifier, "fetch_quotes", quotes)
         assert client.post("/api/alerts/check", headers=ALICE).json()["fired"] == []
 
     def test_a_price_lookup_failure_still_returns_the_alerts(self, client, monkeypatch):
@@ -151,7 +151,7 @@ class TestCheckRoute:
         async def boom(symbols):
             raise FMPError("rate limited")
 
-        monkeypatch.setattr(alerts_router, "fetch_quotes", boom)
+        monkeypatch.setattr(notifier, "fetch_quotes", boom)
         body = client.post("/api/alerts/check", headers=ALICE).json()
 
         assert len(body["alerts"]) == 1

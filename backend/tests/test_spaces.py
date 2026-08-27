@@ -1,7 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app import alerts as alerts_module
 from app import db
+from app.engine import connect, q
 from app.main import app
 from app.space import normalise_space
 
@@ -135,22 +137,26 @@ class TestListIndependence:
 
     def test_an_old_single_list_database_lands_in_both(self):
         """Whatever was saved before the split was serving both purposes."""
-        with db.get_conn() as conn:
-            conn.execute("DROP TABLE watchlist")
+        with connect() as conn:
+            conn.execute(q("DROP TABLE watchlist"))
             conn.execute(
-                "CREATE TABLE watchlist (space_id TEXT NOT NULL DEFAULT 'default', "
-                "ticker TEXT NOT NULL, added_at TEXT NOT NULL, note TEXT, "
-                "PRIMARY KEY (space_id, ticker))"
+                q(
+                    "CREATE TABLE watchlist (space_id TEXT NOT NULL DEFAULT 'default', "
+                    "ticker TEXT NOT NULL, added_at TEXT NOT NULL, note TEXT, "
+                    "PRIMARY KEY (space_id, ticker))"
+                )
             )
             conn.execute(
-                "INSERT INTO watchlist (space_id, ticker, added_at) "
-                "VALUES ('default', 'AAPL', '2026-01-01T00:00:00+00:00')"
+                q(
+                    "INSERT INTO watchlist (space_id, ticker, added_at) "
+                    "VALUES ('default', 'AAPL', '2026-01-01T00:00:00+00:00')"
+                )
             )
 
         db.init_db()
 
-        assert db.get_watchlist("default", db.WATCH_LIST) == ["AAPL"]
-        assert db.get_watchlist("default", db.COMPARE_LIST) == ["AAPL"]
+        assert db.get_watchlist(db.DEFAULT_OWNER, db.WATCH_LIST) == ["AAPL"]
+        assert db.get_watchlist(db.DEFAULT_OWNER, db.COMPARE_LIST) == ["AAPL"]
 
 
 class TestSharedCache:
@@ -200,16 +206,96 @@ class TestNotes:
 class TestMigration:
     def test_a_pre_spaces_table_is_upgraded_in_place(self):
         """An existing database must not lose its watchlist on upgrade."""
-        with db.get_conn() as conn:
-            conn.execute("DROP TABLE watchlist")
+        with connect() as conn:
+            conn.execute(q("DROP TABLE watchlist"))
             conn.execute(
-                "CREATE TABLE watchlist (ticker TEXT PRIMARY KEY, added_at TEXT NOT NULL)"
+                q("CREATE TABLE watchlist (ticker TEXT PRIMARY KEY, added_at TEXT NOT NULL)")
             )
             conn.execute(
-                "INSERT INTO watchlist (ticker, added_at) VALUES ('AAPL', '2026-01-01T00:00:00+00:00')"
+                q(
+                    "INSERT INTO watchlist (ticker, added_at) "
+                    "VALUES ('AAPL', '2026-01-01T00:00:00+00:00')"
+                )
             )
 
         db.init_db()
 
-        assert db.get_watchlist("default") == ["AAPL"]
-        assert db.get_watchlist("someone-else") == []
+        assert db.get_watchlist(db.DEFAULT_OWNER) == ["AAPL"]
+        assert db.get_watchlist(db.space_owner("someone-else")) == []
+
+
+class TestAccountMigration:
+    """Upgrading a live database must not lose anybody's watchlist."""
+
+    def test_a_pre_accounts_table_keeps_its_lists(self):
+        """The shape currently deployed: space_id and list_name, no owner_id."""
+        with connect() as conn:
+            conn.execute(q("DROP TABLE watchlist"))
+            conn.execute(
+                q(
+                    "CREATE TABLE watchlist (space_id TEXT NOT NULL, list_name TEXT NOT NULL, "
+                    "ticker TEXT NOT NULL, added_at TEXT NOT NULL, note TEXT, "
+                    "PRIMARY KEY (space_id, list_name, ticker))"
+                )
+            )
+            conn.execute(
+                q(
+                    "INSERT INTO watchlist (space_id, list_name, ticker, added_at, note) VALUES "
+                    "('alice-abc123', 'watch', 'AAPL', '2026-01-01T00:00:00+00:00', 'my note'), "
+                    "('alice-abc123', 'compare', 'MSFT', '2026-01-01T00:00:00+00:00', NULL)"
+                )
+            )
+
+        db.init_db()
+
+        alice = db.space_owner("alice-abc123")
+        assert db.get_watchlist(alice, db.WATCH_LIST) == ["AAPL"]
+        assert db.get_watchlist(alice, db.COMPARE_LIST) == ["MSFT"]
+        assert db.get_watchlist_entries(alice, db.WATCH_LIST)[0]["note"] == "my note"
+
+    def test_the_upgrade_is_safe_to_run_twice(self):
+        """Every deploy re-runs init_db; the second run must be a no-op."""
+        with connect() as conn:
+            conn.execute(q("DROP TABLE watchlist"))
+            conn.execute(
+                q(
+                    "CREATE TABLE watchlist (space_id TEXT NOT NULL, ticker TEXT NOT NULL, "
+                    "added_at TEXT NOT NULL, PRIMARY KEY (space_id, ticker))"
+                )
+            )
+            conn.execute(
+                q(
+                    "INSERT INTO watchlist (space_id, ticker, added_at) "
+                    "VALUES ('alice-abc123', 'AAPL', '2026-01-01T00:00:00+00:00')"
+                )
+            )
+
+        db.init_db()
+        db.init_db()
+
+        assert db.get_watchlist(db.space_owner("alice-abc123")) == ["AAPL"]
+
+    def test_pre_accounts_alerts_are_carried_over(self):
+        with connect() as conn:
+            conn.execute(q("DROP TABLE alerts"))
+            conn.execute(
+                q(
+                    "CREATE TABLE alerts (id TEXT PRIMARY KEY, space_id TEXT NOT NULL, "
+                    "ticker TEXT NOT NULL, direction TEXT NOT NULL, threshold REAL NOT NULL, "
+                    "note TEXT, created_at TEXT NOT NULL, triggered_at TEXT, "
+                    "triggered_price REAL, acknowledged INTEGER NOT NULL DEFAULT 0)"
+                )
+            )
+            conn.execute(
+                q(
+                    "INSERT INTO alerts (id, space_id, ticker, direction, threshold, created_at) "
+                    "VALUES ('a1', 'alice-abc123', 'AAPL', 'above', 320, "
+                    "'2026-01-01T00:00:00+00:00')"
+                )
+            )
+
+        db.init_db()
+
+        [alert] = alerts_module.list_alerts(db.space_owner("alice-abc123"))
+        assert alert["ticker"] == "AAPL"
+        assert alert["notified_at"] is None

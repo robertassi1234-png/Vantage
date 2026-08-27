@@ -153,7 +153,7 @@ class TestImport:
         ).json()
 
         assert result["added"] == {"watch": 0, "compare": 0}
-        assert db.get_watchlist("alice-abc123", "watch") == ["AAPL", "MSFT"]
+        assert db.get_watchlist(db.space_owner("alice-abc123"), "watch") == ["AAPL", "MSFT"]
 
 
 class TestDisasterRecovery:
@@ -163,7 +163,7 @@ class TestDisasterRecovery:
         exported = client.get("/api/export", headers=ALICE).json()
 
         for name in db.LIST_NAMES:
-            for ticker in db.get_watchlist("alice-abc123", name):
+            for ticker in db.get_watchlist(db.space_owner("alice-abc123"), name):
                 db.remove_from_watchlist(ticker, "alice-abc123", name)
         for alert in alerts_module.list_alerts("alice-abc123"):
             alerts_module.delete_alert("alice-abc123", alert["id"])
