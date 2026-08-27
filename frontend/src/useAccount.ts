@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SIGNED_OUT } from "./AccountContext";
 import { api } from "./api";
 import type { Account } from "./types";
 
@@ -9,15 +10,6 @@ import type { Account } from "./types";
  * account lookup is not an error state. It just means "carry on anonymously",
  * which is also what a server without accounts configured looks like.
  */
-const SIGNED_OUT: Account = {
-  signed_in: false,
-  email: null,
-  accounts_available: false,
-  durable_storage: false,
-  email_delivery: false,
-  reason: null,
-};
-
 export function useAccount() {
   const [account, setAccount] = useState<Account>(SIGNED_OUT);
   const [loading, setLoading] = useState(true);

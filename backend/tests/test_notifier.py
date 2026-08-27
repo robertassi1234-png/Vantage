@@ -27,8 +27,8 @@ def sent(monkeypatch):
     """Capture outbound mail instead of sending it."""
     outbox = []
 
-    def fake_send(to, subject, body):
-        outbox.append({"to": to, "subject": subject, "body": body})
+    def fake_send(to, subject, body, html=None):
+        outbox.append({"to": to, "subject": subject, "body": body, "html": html})
         return True
 
     monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
@@ -233,3 +233,35 @@ class TestEmailBody:
         """Local development and the test suite must never actually mail anyone."""
         monkeypatch.setattr(settings, "smtp_host", "")
         assert mailer.send("a@b.com", "hi", "body") is False
+
+
+class TestHtmlAlternative:
+    """A sign-in link that has to be copied out by hand is a broken link."""
+
+    def test_the_sign_in_email_carries_a_clickable_link(self, client, sent):
+        client.post("/api/auth/request-link", json={"email": "alice@example.com"})
+        [mail] = sent
+
+        assert mail["html"] is not None
+        assert 'href="http://localhost:5173/signin?token=' in mail["html"]
+
+    def test_the_plain_text_body_still_carries_the_url(self, client, sent):
+        """Not every client renders HTML, and the text part is the real message."""
+        client.post("/api/auth/request-link", json={"email": "alice@example.com"})
+        [mail] = sent
+
+        assert "/signin?token=" in mail["body"]
+
+    def test_a_ticker_is_escaped_into_the_html(self, client, monkeypatch, sent):
+        """Ticker text reaches the markup, so it goes through escaping."""
+        sign_in(client)
+        client.post(
+            "/api/alerts",
+            json={"ticker": "BRK.B", "direction": "above", "threshold": 100},
+            headers=ALICE,
+        )
+        monkeypatch.setattr(notifier, "fetch_quotes", priced(500.0))
+        client.post("/api/alerts/check", headers=ALICE)
+
+        assert "BRK.B" in sent[-1]["html"]
+        assert "<script" not in sent[-1]["html"]

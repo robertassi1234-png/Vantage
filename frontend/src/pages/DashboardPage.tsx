@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useCurrentAccount } from "../AccountContext";
 import { ApiError, api } from "../api";
 import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
@@ -16,6 +17,8 @@ import {
 } from "../types";
 
 export function DashboardPage() {
+  const account = useCurrentAccount();
+
   // The watchlist is the source of truth for what to render; quotes only
   // decorate it. Keeping them separate means a failed price lookup can no
   // longer make a populated list look empty.
@@ -197,7 +200,11 @@ export function DashboardPage() {
 
       <h3 className="section-heading">
         Price alerts
-        <span className="section-note">Checked whenever you open Vantage</span>
+        <span className="section-note">
+          {account.email_delivery && account.signed_in
+            ? "Emailed to you when one triggers"
+            : "Checked whenever you open Vantage"}
+        </span>
       </h3>
       <AlertsPanel
         alerts={alerts}

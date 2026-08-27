@@ -186,3 +186,16 @@ describe("redeeming a link", () => {
     expect(api.verifySignIn).not.toHaveBeenCalled();
   });
 });
+
+describe("errors are never swallowed", () => {
+  it("reports a dead link even to someone already signed in", async () => {
+    // Following a stale link while signed in should say so, not do nothing.
+    vi.mocked(api.verifySignIn).mockRejectedValue(
+      new Error("That sign-in link has already been used or is no longer valid."),
+    );
+
+    setup({ account: signedIn(), pendingToken: "stale" });
+
+    expect(await screen.findByText(/no longer valid/i)).toBeInTheDocument();
+  });
+});

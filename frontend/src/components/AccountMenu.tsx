@@ -144,6 +144,9 @@ export function AccountMenu({
                 </p>
               )}
               {status && <p className="account-status">{status}</p>}
+              {/* A link that fails to redeem still has something to say, even
+                  to someone already signed in -- silence reads as a no-op. */}
+              {error && <p className="account-error">{error}</p>}
               <button className="ghost" onClick={handleSignOut} disabled={busy}>
                 Sign out
               </button>

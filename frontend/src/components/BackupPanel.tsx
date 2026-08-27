@@ -1,15 +1,18 @@
 import { useRef, useState } from "react";
+import { useCurrentAccount } from "../AccountContext";
 import { api } from "../api";
 import type { ImportResult, WorkspaceExport } from "../types";
 
 /**
  * Export and import the whole workspace.
  *
- * The space id lives in this browser's localStorage, so clearing site data or
- * moving to another device loses the lists. A downloadable file is the honest
- * fix short of accounts: it survives both, and it works offline.
+ * Signed out, the space id lives in this browser's localStorage, so clearing
+ * site data or moving to another device loses the lists, and a file is the
+ * honest fix. Signed in, the account already handles that -- but a file still
+ * works offline, and is the only way to hand a list to someone else.
  */
 export function BackupPanel() {
+  const account = useCurrentAccount();
   const fileInput = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +81,9 @@ export function BackupPanel() {
   return (
     <div className="backup-panel">
       <p className="backup-note">
-        Your lists live in this browser only. Save a backup file to move them to another
-        device, or to get them back if you clear your browser data.
+        {account.signed_in
+          ? "Your lists are saved to your account and already follow you between devices. A backup file is still useful to keep a copy offline or share one with someone else."
+          : "Your lists live in this browser only. Save a backup file to move them to another device, or to get them back if you clear your browser data."}
       </p>
 
       <div className="backup-actions">

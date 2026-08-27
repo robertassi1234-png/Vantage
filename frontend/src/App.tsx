@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AccountProvider } from "./AccountContext";
 import { AccountMenu } from "./components/AccountMenu";
 import { ComparisonPage } from "./pages/ComparisonPage";
 import { DashboardPage } from "./pages/DashboardPage";
@@ -133,11 +134,13 @@ function App() {
         </div>
       </header>
 
-      <main key={identity}>
-        {tab === "dashboard" && <DashboardPage />}
-        {tab === "comparison" && <ComparisonPage />}
-        {tab === "fed" && <FedTrackerPage />}
-      </main>
+      <AccountProvider value={account}>
+        <main key={identity}>
+          {tab === "dashboard" && <DashboardPage />}
+          {tab === "comparison" && <ComparisonPage />}
+          {tab === "fed" && <FedTrackerPage />}
+        </main>
+      </AccountProvider>
 
       <footer className="app-footer">
         <p>
