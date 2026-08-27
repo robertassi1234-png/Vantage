@@ -331,3 +331,43 @@ describe("telling a cookie problem apart from a flaky one", () => {
     expect(isAnonymousOnly()).toBe(false);
   });
 });
+
+describe("a server running an older build than the page", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    resetCredentialsMode();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    resetCredentialsMode();
+  });
+
+  it("explains a bare 404 instead of relaying \"Not Found\"", async () => {
+    // The site and the API deploy separately, so the page can call a route
+    // the running server does not have yet. "Not Found" tells nobody that.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => errorResponse(404, JSON.stringify({ detail: "Not Found" }))),
+    );
+
+    await expect(runWithTimers(() => api.requestSignInLink("a@b.com"))).rejects.toThrow(
+      /still deploying/i,
+    );
+  });
+
+  it("keeps a 404 that actually says something useful", async () => {
+    // An unknown list name is a real 404 with a real explanation.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        errorResponse(404, JSON.stringify({ detail: "Unknown list 'portfolio'." })),
+      ),
+    );
+
+    await expect(runWithTimers(() => api.getList("watch" as never))).rejects.toThrow(
+      /Unknown list 'portfolio'/,
+    );
+  });
+});

@@ -46,6 +46,17 @@ function friendlyServerError(status: number, body: string): string {
     }
   })();
 
+  // FastAPI answers an unknown path with a bare "Not Found", which as a
+  // message tells the reader nothing. It means the server is running an
+  // older build than the page is -- the site and the API deploy separately,
+  // so one can be minutes ahead of the other.
+  if (status === 404 && (!detail || detail === "Not Found")) {
+    return (
+      "This part of the app isn't on the server yet — it's probably still " +
+      "deploying. Wait a minute and reload."
+    );
+  }
+
   if (detail) return detail;
   if (status === 502 || status === 503 || status === 504) {
     return "The data service is temporarily unavailable. Try again in a moment.";
