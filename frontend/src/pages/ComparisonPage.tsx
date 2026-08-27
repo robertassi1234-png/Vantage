@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { ApiError, api } from "../api";
 import { ComparisonChart, SERIES_COLORS, type ChartSeries } from "../components/ComparisonChart";
+import { PeerSuggestions } from "../components/PeerSuggestions";
 import { downloadCsv } from "../csv";
 import { StockTable } from "../components/StockTable";
 import { TickerSearch } from "../components/TickerSearch";
-import { RANGES, type FundamentalsRow, type RangeKey } from "../types";
+import { RANGES, type FundamentalsRow, type PeerSuggestion, type RangeKey } from "../types";
 
 export function ComparisonPage() {
   const [rows, setRows] = useState<FundamentalsRow[]>([]);
@@ -16,6 +17,11 @@ export function ComparisonPage() {
   const [series, setSeries] = useState<ChartSeries[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+
+  const [peers, setPeers] = useState<PeerSuggestion[]>([]);
+  const [peersLoading, setPeersLoading] = useState(false);
+  const [peersError, setPeersError] = useState<string | null>(null);
+  const [addingPeer, setAddingPeer] = useState<string | null>(null);
 
   const tickers = rows.map((r) => r.ticker).join(",");
 
@@ -56,6 +62,40 @@ export function ComparisonPage() {
     };
   }, [tickers, range]);
 
+  // Suggestions follow the list: adding a company changes what else is worth
+  // looking at. Kept apart from the table load so a peer outage can't stop
+  // the fundamentals rendering.
+  useEffect(() => {
+    if (!tickers) {
+      setPeers([]);
+      setPeersError(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setPeersLoading(true);
+      setPeersError(null);
+      try {
+        const result = await api.getPeers();
+        if (cancelled) return;
+        setPeers(result.suggestions);
+        setPeersError(result.error);
+      } catch (e) {
+        if (!cancelled) {
+          setPeers([]);
+          setPeersError(e instanceof Error ? e.message : String(e));
+        }
+      } finally {
+        if (!cancelled) setPeersLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tickers]);
+
   async function loadFundamentals(refresh = false) {
     setLoading(true);
     setError(null);
@@ -81,6 +121,15 @@ export function ComparisonPage() {
       await loadFundamentals();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleAddPeer(symbol: string) {
+    setAddingPeer(symbol);
+    try {
+      await handleAdd(symbol);
+    } finally {
+      setAddingPeer(null);
     }
   }
 
@@ -138,6 +187,24 @@ export function ComparisonPage() {
         </div>
       ) : (
         <StockTable rows={rows} onRemove={handleRemove} />
+      )}
+
+      {rows.length > 0 && (peersLoading || peers.length > 0 || peersError) && (
+        <>
+          <h3 className="section-heading">
+            Similar companies
+            <span className="section-note">
+              A multiple only means something next to competitors
+            </span>
+          </h3>
+          <PeerSuggestions
+            suggestions={peers}
+            loading={peersLoading}
+            error={peersError}
+            onAdd={handleAddPeer}
+            adding={addingPeer}
+          />
+        </>
       )}
 
       {rows.length > 0 && (

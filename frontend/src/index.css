@@ -388,8 +388,16 @@ button {
 
 .watch-row {
   display: flex;
-  align-items: center;
+  /* The price line sits on top and the note underneath, so a long note
+     wraps freely instead of squeezing the numbers. */
+  flex-direction: column;
   border-bottom: 1px solid var(--border);
+}
+
+.watch-line {
+  display: flex;
+  align-items: center;
+  width: 100%;
 }
 
 .watch-row:last-child {
@@ -1745,4 +1753,176 @@ td.band-high {
     font-size: 0.78rem;
     white-space: nowrap;
   }
+}
+
+/* --- watchlist notes --------------------------------------------------- */
+
+.note-btn {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  /* Dimmed until hovered: an empty note is an offer, not a task. */
+  color: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.watch-row:hover .note-btn,
+.note-btn:focus-visible {
+  color: var(--muted-2);
+}
+
+.note-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+/* A row that already has a note keeps its pencil visible, so the note is
+   findable without hovering every row to look for one. */
+.note-btn.has-note {
+  color: var(--accent);
+}
+
+.watch-note {
+  margin: -0.2rem 0 0;
+  padding: 0 3.6rem 0.7rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-editor {
+  width: 100%;
+  padding: 0 0.9rem 0.8rem;
+}
+
+.note-editor textarea {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.note-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.btn-small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+}
+
+.ghost-btn {
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.ghost-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted-2);
+}
+
+.note-hint {
+  color: var(--muted-2);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 620px) {
+  /* No hover on touch, so the pencil has to be visible from the start. */
+  .note-btn {
+    color: var(--muted-2);
+  }
+
+  .note-hint {
+    display: none;
+  }
+}
+
+/* --- peer suggestions -------------------------------------------------- */
+
+.peer-list {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  /* Cards rather than rows: each carries a reason, and the count varies. */
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.peer-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.peer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.peer-symbol {
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.peer-price {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.peer-name {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-why {
+  margin: 0 0 0.5rem;
+  color: var(--muted-2);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.peer-move {
+  color: var(--tone);
+  font-variant-numeric: tabular-nums;
+}
+
+.peer-card .btn-small {
+  align-self: flex-start;
+  margin-top: auto;
 }

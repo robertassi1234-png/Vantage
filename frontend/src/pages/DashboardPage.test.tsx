@@ -3,7 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
 import { ApiError, api } from "../api";
-import type { Quote } from "../types";
+import type { Quote, WatchlistEntry } from "../types";
+
+/** Watchlist entries from bare tickers, for cases where notes don't matter. */
+const entries = (...tickers: string[]): WatchlistEntry[] =>
+  tickers.map((ticker) => ({ ticker, added_at: "2026-01-01T00:00:00+00:00", note: null }));
 
 const quote = (symbol: string, price = 300): Quote => ({
   symbol,
@@ -21,7 +25,9 @@ const quote = (symbol: string, price = 300): Quote => ({
 
 /** Wire up the whole api surface so only the behaviour under test varies. */
 function stubApi(over: Partial<typeof api> = {}) {
-  vi.spyOn(api, "getList").mockResolvedValue([]);
+  vi.spyOn(api, "getListEntries").mockResolvedValue([]);
+  vi.spyOn(api, "setNote").mockResolvedValue([]);
+  vi.spyOn(api, "getPeers").mockResolvedValue({ suggestions: [], based_on: [], error: null });
   vi.spyOn(api, "getIndices").mockResolvedValue([]);
   vi.spyOn(api, "getQuotes").mockResolvedValue([]);
   vi.spyOn(api, "checkAlerts").mockResolvedValue({
@@ -53,7 +59,7 @@ describe("DashboardPage watchlist", () => {
     // failed or empty price lookup made a populated watchlist look empty --
     // indistinguishable from having added nothing at all.
     stubApi();
-    vi.spyOn(api, "getList").mockResolvedValue(["AAPL"]);
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL"));
     vi.spyOn(api, "getQuotes").mockResolvedValue([]);
 
     render(<DashboardPage />);
@@ -65,7 +71,7 @@ describe("DashboardPage watchlist", () => {
 
   it("still lists tickers when the quote request fails outright", async () => {
     stubApi();
-    vi.spyOn(api, "getList").mockResolvedValue(["AAPL", "MSFT"]);
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL", "MSFT"));
     vi.spyOn(api, "getQuotes").mockRejectedValue(new ApiError("rate limited"));
 
     render(<DashboardPage />);
@@ -77,7 +83,7 @@ describe("DashboardPage watchlist", () => {
 
   it("shows prices once they arrive", async () => {
     stubApi();
-    vi.spyOn(api, "getList").mockResolvedValue(["AAPL"]);
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL"));
     vi.spyOn(api, "getQuotes").mockResolvedValue([quote("AAPL", 309.9)]);
 
     render(<DashboardPage />);
@@ -97,7 +103,7 @@ describe("DashboardPage watchlist", () => {
       added.push(ticker);
       return added;
     });
-    vi.spyOn(api, "getList").mockImplementation(async () => added);
+    vi.spyOn(api, "getListEntries").mockImplementation(async () => entries(...added));
 
     render(<DashboardPage />);
     await screen.findByText(/watchlist is empty/i);
@@ -116,7 +122,7 @@ describe("DashboardPage watchlist", () => {
       added.push(ticker);
       return added;
     });
-    vi.spyOn(api, "getList").mockImplementation(async () => added);
+    vi.spyOn(api, "getListEntries").mockImplementation(async () => entries(...added));
     vi.spyOn(api, "getQuotes").mockRejectedValue(new ApiError("upstream down"));
 
     render(<DashboardPage />);
@@ -128,5 +134,76 @@ describe("DashboardPage watchlist", () => {
     // Adding worked; only the price lookup failed. The row must still appear,
     // or the click looks like it did nothing.
     await waitFor(() => expect(watchlistRow("AAPL")).toBeInTheDocument());
+  });
+});
+
+describe("DashboardPage notes", () => {
+  it("shows a saved note under its stock", async () => {
+    stubApi();
+    vi.spyOn(api, "getListEntries").mockResolvedValue([
+      { ticker: "AAPL", added_at: "2026-01-01T00:00:00+00:00", note: "waiting for a dip" },
+    ]);
+
+    render(<DashboardPage />);
+    expect(await screen.findByText("waiting for a dip")).toBeInTheDocument();
+  });
+
+  it("saves a note against the right list and ticker", async () => {
+    const user = userEvent.setup();
+    stubApi();
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL"));
+    const setNote = vi
+      .spyOn(api, "setNote")
+      .mockResolvedValue([
+        { ticker: "AAPL", added_at: "2026-01-01T00:00:00+00:00", note: "cheap" },
+      ]);
+
+    render(<DashboardPage />);
+    await user.click(await screen.findByRole("button", { name: /add a note on AAPL/i }));
+    await user.type(screen.getByRole("textbox", { name: /your note on AAPL/i }), "cheap{Enter}");
+
+    await waitFor(() => expect(setNote).toHaveBeenCalledWith("watch", "AAPL", "cheap"));
+  });
+
+  it("renders the note the server returned, not what was typed", async () => {
+    // The route hands back the whole list, so the server stays the source of truth.
+    const user = userEvent.setup();
+    stubApi();
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL"));
+    vi.spyOn(api, "setNote").mockResolvedValue([
+      { ticker: "AAPL", added_at: "2026-01-01T00:00:00+00:00", note: "stored version" },
+    ]);
+
+    render(<DashboardPage />);
+    await user.click(await screen.findByRole("button", { name: /add a note on AAPL/i }));
+    await user.type(screen.getByRole("textbox", { name: /your note on AAPL/i }), "typed version{Enter}");
+
+    expect(await screen.findByText("stored version")).toBeInTheDocument();
+  });
+
+  it("surfaces a failed save rather than showing a note that was not kept", async () => {
+    const user = userEvent.setup();
+    stubApi();
+    vi.spyOn(api, "getListEntries").mockResolvedValue(entries("AAPL"));
+    vi.spyOn(api, "setNote").mockRejectedValue(new Error("Something went wrong (error 500)."));
+
+    render(<DashboardPage />);
+    await user.click(await screen.findByRole("button", { name: /add a note on AAPL/i }));
+    await user.type(screen.getByRole("textbox", { name: /your note on AAPL/i }), "lost{Enter}");
+
+    expect(await screen.findByText(/error 500/i)).toBeInTheDocument();
+    expect(screen.queryByText("lost")).not.toBeInTheDocument();
+  });
+
+  it("keeps the note when a price lookup fails", async () => {
+    // Notes and quotes come from different requests; one must not blank the other.
+    stubApi();
+    vi.spyOn(api, "getListEntries").mockResolvedValue([
+      { ticker: "AAPL", added_at: "2026-01-01T00:00:00+00:00", note: "still here" },
+    ]);
+    vi.spyOn(api, "getQuotes").mockRejectedValue(new ApiError("rate limited"));
+
+    render(<DashboardPage />);
+    expect(await screen.findByText("still here")).toBeInTheDocument();
   });
 });

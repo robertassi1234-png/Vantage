@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app import db
+from app import db, peers
 from app.config import settings
 from app.fmp_client import FMPError
 from app.market_data import fetch_fundamentals, search_symbols
@@ -19,6 +19,12 @@ async def search(q: str) -> list[dict]:
         return await search_symbols(q)
     except FMPError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.get("/peers")
+async def suggest_peers(owner: str = Depends(current_owner)) -> dict:
+    """Companies worth adding to the comparison, based on what's in it."""
+    return await peers.suggest(owner)
 
 
 def _valid_list(list_name: str) -> str:

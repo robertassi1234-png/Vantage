@@ -155,3 +155,21 @@ export interface SignInResult {
   email: string | null;
   claimed: { watchlist: number; alerts: number };
 }
+
+
+export interface PeerSuggestion {
+  symbol: string;
+  /** How many of the compared companies list this one as a peer. */
+  count: number;
+  because_of: string[];
+  name?: string | null;
+  price?: number | null;
+  changePercent?: number | null;
+}
+
+export interface PeerSuggestions {
+  suggestions: PeerSuggestion[];
+  /** The compared tickers the suggestions were derived from. */
+  based_on: string[];
+  error: string | null;
+}

@@ -16,6 +16,7 @@ import type {
   Account,
   SignInLinkResult,
   SignInResult,
+  PeerSuggestions,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -115,6 +116,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ note }),
     }),
+
+  getPeers: () => request<PeerSuggestions>("/api/peers"),
 
   getFundamentals: (refresh = false) =>
     request<FundamentalsRow[]>(`/api/fundamentals?refresh=${refresh}`),

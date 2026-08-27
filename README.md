@@ -21,12 +21,18 @@ by email.
    Russell 2000; and an interactive price chart (1M–5Y) for any watchlist name
    or index. Search accepts company names, not just tickers — typing "apple"
    finds AAPL.
-3. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
+3. **Notes** — write down why you added something. Six months later the
+   numbers still say what a company is doing; only your note says what you
+   were thinking.
+4. **Peer suggestions** — Compare proposes competitors for whatever is
+   already in the table, ranked by how many of your holdings list each one.
+   A multiple only means something next to the companies it competes with.
+5. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
    market cap, revenue/EPS growth, margins, debt/equity, ROE, dividend yield,
    and more in a sortable table. Data from [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs).
    Fundamentals are cached for 24h (configurable) so you don't burn API calls
    on every page load.
-4. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
+6. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
    (public RSS feed, no API key needed), summarizes tone (hawkish/dovish/neutral)
    and key takeaways using Claude Haiku, and shows a timeline. Refresh is
    **on-demand** (a button) rather than a background daily job — simpler to
@@ -259,12 +265,13 @@ backend/
     mailer.py         SMTP sending, with a log-only fallback
     notifier.py       Firing alerts and emailing them
     alerts.py         Price alert storage and evaluation
+    peers.py          Ranking peer suggestions for a comparison list
     space.py          Resolves a request to an owner: account or browser
     fmp_client.py      Financial Modeling Prep API client
     fed_scraper.py     federalreserve.gov RSS + statement text scraper
     claude_client.py   Claude Haiku summarization
     routers/
-      stocks.py        /api/lists, /api/fundamentals, /api/search
+      stocks.py        /api/lists, /api/fundamentals, /api/search, /api/peers
       market.py        /api/market/quotes, /indices, /history
       alerts.py        /api/alerts
       auth.py          /api/auth/me, /request-link, /verify, /signout
@@ -279,7 +286,7 @@ frontend/
     types.ts           Shared TS types
     useAccount.ts      Sign-in state and what the server supports
     pages/             DashboardPage, ComparisonPage, FedTrackerPage
-    components/        AccountMenu, WatchlistPanel, charts, StockTable
+    components/        AccountMenu, WatchlistPanel, PeerSuggestions, charts
   .env.example
 ```
 

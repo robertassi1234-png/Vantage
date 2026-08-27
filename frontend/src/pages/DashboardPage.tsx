@@ -14,6 +14,7 @@ import {
   type PricePoint,
   type Quote,
   type RangeKey,
+  type WatchlistEntry,
 } from "../types";
 
 export function DashboardPage() {
@@ -22,7 +23,7 @@ export function DashboardPage() {
   // The watchlist is the source of truth for what to render; quotes only
   // decorate it. Keeping them separate means a failed price lookup can no
   // longer make a populated list look empty.
-  const [tickers, setTickers] = useState<string[]>([]);
+  const [entries, setEntries] = useState<WatchlistEntry[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [indices, setIndices] = useState<IndexQuote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,12 +42,15 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const watchlist = await api.getList("watch");
-      setTickers(watchlist);
+      // Entries rather than bare tickers: the note lives alongside the symbol,
+      // and one request beats two.
+      const watchlist = await api.getListEntries("watch");
+      setEntries(watchlist);
+      const symbols = watchlist.map((e) => e.ticker);
       // Indices and quotes are independent; one failing shouldn't blank the other.
       const [indexResult, quoteResult] = await Promise.allSettled([
         api.getIndices(refresh),
-        api.getQuotes(watchlist, refresh),
+        api.getQuotes(symbols, refresh),
       ]);
 
       if (indexResult.status === "fulfilled") setIndices(indexResult.value);
@@ -126,9 +130,19 @@ export function DashboardPage() {
   async function handleRemove(symbol: string) {
     try {
       await api.removeFromList("watch", symbol);
-      setTickers((prev) => prev.filter((t) => t !== symbol));
+      setEntries((prev) => prev.filter((e) => e.ticker !== symbol));
       setQuotes((prev) => prev.filter((q) => q.symbol !== symbol));
       if (chartSymbol === symbol) setChartSymbol(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function handleSaveNote(symbol: string, note: string) {
+    try {
+      // The route returns the whole list back, so the note and everything
+      // else stay in step without a second round trip.
+      setEntries(await api.setNote("watch", symbol, note));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -176,13 +190,14 @@ export function DashboardPage() {
 
       <h3 className="section-heading">
         Watchlist
-        <span className="section-note">Click any row for its full price chart</span>
+        <span className="section-note">Click a row for its chart, or ✎ to note why you’re watching</span>
       </h3>
       <WatchlistPanel
-        tickers={tickers}
+        entries={entries}
         quotes={quotes}
         onSelect={showChart}
         onRemove={handleRemove}
+        onSaveNote={handleSaveNote}
         activeSymbol={chartSymbol}
       />
 

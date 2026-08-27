@@ -18,6 +18,8 @@ import httpx
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
+# "People also watch" -- Yahoo's own similar-company list, keyed on a symbol.
+PEERS_URL = "https://query2.finance.yahoo.com/v6/finance/recommendationsbysymbol/{symbol}"
 
 # Yahoo rejects requests without a browser-ish User-Agent.
 HEADERS = {
@@ -172,3 +174,30 @@ async def search_symbols(query: str, limit: int = 8) -> list[dict]:
             }
         )
     return results[:limit]
+
+
+async def fetch_peers(symbol: str, limit: int = 6) -> list[str]:
+    """Companies Yahoo considers similar to `symbol`.
+
+    Yahoo derives these from what people actually look at together, which
+    tends to match how an investor thinks about competitors better than a
+    sector code does -- it puts NVDA next to AMD rather than next to every
+    semiconductor on the exchange.
+    """
+    symbol = symbol.strip().upper()
+    if not symbol:
+        return []
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        payload = await _get_json(client, PEERS_URL.format(symbol=symbol))
+
+    results = ((payload or {}).get("finance") or {}).get("result") or []
+    if not results:
+        return []
+
+    peers = []
+    for item in results[0].get("recommendedSymbols") or []:
+        peer = (item or {}).get("symbol")
+        if peer and peer.upper() != symbol:
+            peers.append(peer.upper())
+    return peers[:limit]

@@ -252,3 +252,37 @@ async def _gather(client: httpx.AsyncClient, ticker: str):
         profile_task, ratios_task, key_metrics_task, growth_task
     )
     return _first(profile), _first(ratios), _first(key_metrics), _first(growth)
+
+
+async def fetch_peers(ticker: str, limit: int = 6) -> list[str]:
+    """FMP's peer list for a ticker.
+
+    The response shape has changed across FMP versions -- a flat list of
+    companies in `stable`, a single row carrying `peersList` in the older
+    ones -- so both are read rather than assuming whichever is live today.
+    """
+    if not settings.fmp_api_key:
+        raise FMPError("FMP_API_KEY is not set")
+
+    ticker = ticker.strip().upper()
+    if not ticker:
+        return []
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        data = await _get(client, "stock-peers", symbol=ticker)
+
+    peers: list[str] = []
+    for row in data if isinstance(data, list) else [data]:
+        if not isinstance(row, dict):
+            continue
+        if isinstance(row.get("peersList"), list):
+            peers.extend(str(p) for p in row["peersList"] if p)
+        elif row.get("symbol"):
+            peers.append(str(row["symbol"]))
+
+    seen: list[str] = []
+    for peer in peers:
+        peer = peer.strip().upper()
+        if peer and peer != ticker and peer not in seen:
+            seen.append(peer)
+    return seen[:limit]

@@ -80,6 +80,10 @@ async def search_symbols(query: str, limit: int = 8) -> list[dict]:
     return await _first_success("search", "search_symbols", query, limit)
 
 
+async def fetch_peers(symbol: str, limit: int = 6) -> list[str]:
+    return await _first_success("peers", "fetch_peers", symbol, limit)
+
+
 async def fetch_fundamentals(ticker: str) -> dict:
     """FMP only -- see the module docstring."""
     return await fmp_client.fetch_fundamentals(ticker)
