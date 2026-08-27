@@ -8,6 +8,13 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
     envVars:
+      # Pinned so the deploy runs the interpreter the tests run on. Without
+      # this the host picks its current default, which moves: a Python newer
+      # than a dependency has wheels for turns `pip install` into a source
+      # build and fails the whole deploy.
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+
       - key: FMP_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY

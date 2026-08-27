@@ -139,6 +139,11 @@ cache, so hammering it is the one way to burn through calls quickly.
 A `render.yaml` blueprint at the repo root deploys the backend as a web
 service and the frontend as a static site in one pass.
 
+The blueprint pins `PYTHON_VERSION`. That is not cosmetic: hosts move their
+default interpreter, and a Python newer than a dependency publishes wheels for
+turns `pip install` into a source build, which fails the deploy outright. The
+pinned version is one the test suite is run against.
+
 The app works immediately after that, with lists kept per browser. Turning on
 accounts — one watchlist that follows you between devices, and price alerts
 that arrive by email — needs two free services and about ten minutes. See
