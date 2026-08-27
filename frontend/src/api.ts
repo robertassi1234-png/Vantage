@@ -13,6 +13,9 @@ import type {
   AlertCheckResult,
   WorkspaceExport,
   ImportResult,
+  Account,
+  SignInLinkResult,
+  SignInResult,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -56,6 +59,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     try {
       const res = await fetch(`${BASE_URL}${path}`, {
         ...options,
+        // The session lives in an httpOnly cookie, which the browser only
+        // attaches cross-origin when the request asks for credentials.
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           // Scopes the watchlist to this browser so two people opening the
@@ -127,6 +133,22 @@ export const api = {
     request<PriceHistory>(
       `/api/market/history/${encodeURIComponent(symbol)}?range=${range}`,
     ),
+
+  getAccount: () => request<Account>("/api/auth/me"),
+
+  requestSignInLink: (email: string) =>
+    request<SignInLinkResult>("/api/auth/request-link", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  verifySignIn: (token: string, claimSpace = true) =>
+    request<SignInResult>("/api/auth/verify", {
+      method: "POST",
+      body: JSON.stringify({ token, claim_space: claimSpace }),
+    }),
+
+  signOut: () => request<{ signed_in: boolean }>("/api/auth/signout", { method: "POST" }),
 
   getAlerts: () => request<PriceAlert[]>("/api/alerts"),
 

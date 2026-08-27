@@ -232,3 +232,54 @@ class TestHousekeeping:
         # about expiry, and a used token is already inert.
         assert len(rows) == 2
         assert sessions["n"] == 1
+
+
+class TestSetupReadiness:
+    """Two ways a deployment can look fine and quietly lose accounts."""
+
+    def test_temporary_storage_is_reported(self, client):
+        """SQLite on a free instance is wiped by the next deploy."""
+        body = client.get("/api/auth/me").json()
+        assert body["durable_storage"] is False
+        assert body["accounts_available"] is False
+        assert "DATABASE_URL" in body["reason"]
+
+    def test_a_wildcard_origin_disables_sign_in(self, client, monkeypatch):
+        """Cookies plus any-origin would let any site read the watchlist."""
+        monkeypatch.setattr(settings, "cors_origins", "*")
+        body = client.get("/api/auth/me").json()
+        assert body["accounts_available"] is False
+        assert "CORS_ORIGINS" in body["reason"]
+
+    def test_a_configured_server_reports_ready(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://vantage.example.com")
+        monkeypatch.setattr("app.routers.auth.is_postgres", lambda: True)
+
+        body = client.get("/api/auth/me").json()
+        assert body["accounts_available"] is True
+        assert body["reason"] is None
+
+    def test_email_delivery_is_reported_separately(self, client, monkeypatch):
+        assert client.get("/api/auth/me").json()["email_delivery"] is False
+        monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+        assert client.get("/api/auth/me").json()["email_delivery"] is True
+
+
+class TestCorsOrigins:
+    def test_a_bare_hostname_is_read_as_https(self, monkeypatch):
+        """What someone pastes when copying their site's address."""
+        monkeypatch.setattr(settings, "cors_origins", "vantage.onrender.com")
+        assert settings.cors_origin_list == ["https://vantage.onrender.com"]
+
+    def test_a_trailing_slash_is_tolerated(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://vantage.onrender.com/")
+        assert settings.cors_origin_list == ["https://vantage.onrender.com"]
+
+    def test_a_wildcard_never_allows_credentials(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "*")
+        assert settings.allows_credentialed_cors is False
+
+    def test_naming_an_origin_allows_credentials(self, monkeypatch):
+        monkeypatch.setattr(settings, "cors_origins", "https://a.com, http://localhost:5173")
+        assert settings.allows_credentialed_cors is True
+        assert settings.cors_origin_list == ["https://a.com", "http://localhost:5173"]

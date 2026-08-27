@@ -37,9 +37,33 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
+        """Origins allowed to call the API.
+
+        A bare hostname is read as https, because that is what someone pastes
+        when they copy their site's address out of a hosting dashboard.
+        """
         if self.cors_origins.strip() == "*":
             return ["*"]
-        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+        origins = []
+        for origin in self.cors_origins.split(","):
+            origin = origin.strip().rstrip("/")
+            if not origin:
+                continue
+            if "://" not in origin:
+                origin = f"https://{origin}"
+            origins.append(origin)
+        return origins
+
+    @property
+    def allows_credentialed_cors(self) -> bool:
+        """Whether signed-in requests can be made from another origin.
+
+        Cookies plus a wildcard origin would let any website on the internet
+        read and change a signed-in reader's watchlist, so the two are never
+        combined: naming the site explicitly is what turns sign-in on.
+        """
+        return self.cors_origin_list != ["*"]
 
 
 settings = Settings()

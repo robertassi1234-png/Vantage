@@ -1528,3 +1528,221 @@ td.band-high {
   font-size: 0.85rem;
   line-height: 1.6;
 }
+
+/* --- account ---------------------------------------------------------- */
+
+/* Screen-reader-only: labels that a sighted reader gets from the placeholder. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.account {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.account-trigger {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 34px;
+  padding: 0 0.7rem;
+  border-radius: 17px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-family: inherit;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.account-trigger:hover {
+  color: var(--text);
+  border-color: var(--muted-2);
+}
+
+.account-trigger.signed-in {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+  background: var(--accent-soft);
+}
+
+/* An address can be long; the dot alone still says signed in. */
+.account-label {
+  max-width: 14ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 20;
+  width: 20rem;
+  max-width: calc(100vw - 2rem);
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+
+.account-panel p {
+  margin: 0 0 0.7rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.account-panel .muted {
+  color: var(--muted);
+}
+
+.account-email {
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.account-panel form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.account-panel input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.account-panel button[type="submit"] {
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.account-panel button[type="submit"]:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.account-panel button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.account-panel .ghost {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.account-panel .ghost:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--muted-2);
+}
+
+.account-status {
+  color: var(--dovish);
+}
+
+.account-error {
+  color: var(--hawkish);
+}
+
+/* Setup problems the reader can't fix themselves, so state them calmly. */
+.account-warning {
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  background: var(--band-high-bg);
+  color: var(--text);
+  border: 1px solid var(--band-high-edge);
+}
+
+@media (max-width: 620px) {
+  /* The dot carries the meaning once the header is tight. */
+  .account-label {
+    display: none;
+  }
+
+  .account-trigger {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  /* Anchored to the viewport, not the trigger: the header is sticky and the
+     panel is wider than the button, so hanging it off the button's right edge
+     pushes it off a phone screen. */
+  .account {
+    position: static;
+  }
+
+  .account-panel {
+    position: fixed;
+    top: 4.75rem;
+    left: 1rem;
+    right: 1rem;
+    width: auto;
+    max-width: none;
+  }
+}
+
+/* The header is a single row that runs out of width on a phone, so brand and
+   controls stack rather than scrolling off the side. */
+@media (max-width: 620px) {
+  .app-header {
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    padding: 0.8rem 0;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+
+  .app-header nav {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .app-header nav button {
+    flex: 1;
+    min-width: 0;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+}

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app import auth, db, mailer
 from app.config import settings
+from app.engine import is_postgres
 from app.space import current_space
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -24,7 +25,12 @@ class TokenRequest(BaseModel):
 class MeResponse(BaseModel):
     signed_in: bool
     email: str | None = None
+    # What the server can actually do, so the UI never promises something the
+    # deployment isn't set up for.
+    accounts_available: bool
+    durable_storage: bool
     email_delivery: bool
+    reason: str | None = None
 
 
 @router.get("/me")
@@ -32,11 +38,33 @@ def me(
     vantage_session: str | None = Cookie(default=None),
 ) -> MeResponse:
     user = auth.user_for_session(vantage_session)
+    durable = is_postgres()
+    available = settings.allows_credentialed_cors
+
+    # Two ways a deployment can look fine and lose accounts anyway: a cookie
+    # the browser refuses to send cross-origin, and a database that is wiped
+    # by the next deploy. Better to say so than to sign someone in and forget.
+    reason = None
+    if not available:
+        reason = (
+            "Sign-in is off because this server accepts requests from any address. "
+            "Set CORS_ORIGINS to your site's address to turn it on."
+        )
+    elif not durable:
+        reason = (
+            "This server is using temporary storage, so accounts would be lost on the "
+            "next restart. Set DATABASE_URL to a Postgres connection string."
+        )
+        available = False
+
     return MeResponse(
         signed_in=user is not None,
         email=user["email"] if user else None,
+        accounts_available=available,
+        durable_storage=durable,
         # Lets the UI say plainly whether alert emails can actually be sent.
         email_delivery=mailer.is_configured(),
+        reason=reason,
     )
 
 

@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,17 +7,25 @@ from app.config import settings
 from app.db import init_db
 from app.routers import alerts, auth, fed, market, notify, portability, stocks
 
+log = logging.getLogger(__name__)
+
 app = FastAPI(title="Vantage", description="Personal stock research app")
 
-# Sessions ride in a cookie, so the browser only sends them when the API says
-# credentials are allowed -- and the spec forbids pairing that with a wildcard
-# origin, hence the regex when someone has set CORS_ORIGINS=*.
-_origins = settings.cors_origin_list
+# Sessions ride in a cookie, and a cookie is only sent cross-origin when the
+# API allows credentials. Allowing them alongside a wildcard origin would let
+# any website read a signed-in reader's watchlist, so the wildcard keeps the
+# anonymous app working from anywhere and sign-in waits for a named origin.
+_credentialed = settings.allows_credentialed_cors
+if not _credentialed:
+    log.warning(
+        "CORS_ORIGINS is '*', so signing in from another origin is disabled. "
+        "Set it to your site's address to enable accounts."
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[] if _origins == ["*"] else _origins,
-    allow_origin_regex=".*" if _origins == ["*"] else None,
-    allow_credentials=True,
+    allow_origins=settings.cors_origin_list,
+    allow_credentials=_credentialed,
     allow_methods=["*"],
     allow_headers=["*"],
 )

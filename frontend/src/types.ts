@@ -130,3 +130,28 @@ export interface FedRefreshResult {
   errors: string[];
   timeline: FedStatement[];
 }
+
+
+export interface Account {
+  signed_in: boolean;
+  email: string | null;
+  /** Whether this server is actually set up to keep accounts. */
+  accounts_available: boolean;
+  durable_storage: boolean;
+  email_delivery: boolean;
+  /** Plain-language explanation when accounts are unavailable. */
+  reason: string | null;
+}
+
+export interface SignInLinkResult {
+  sent: boolean;
+  message: string;
+  /** Only present when no mail provider is configured, i.e. local development. */
+  dev_link?: string;
+}
+
+export interface SignInResult {
+  signed_in: boolean;
+  email: string | null;
+  claimed: { watchlist: number; alerts: number };
+}
