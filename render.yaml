@@ -12,10 +12,42 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+
+      # Accounts. Without DATABASE_URL the app falls back to a file on the
+      # instance's disk, which a free plan wipes on every restart -- fine for
+      # trying it out, but sign-ins would not survive.
+      - key: DATABASE_URL
+        sync: false
+
+      # Must name the site exactly. A cookie plus an "any origin" setting
+      # would let any website read a signed-in reader's watchlist, so sign-in
+      # stays off until this is a real address.
       - key: CORS_ORIGINS
-        value: "*"
-      - key: VANTAGE_DB_PATH
-        value: vantage.db
+        sync: false
+
+      # Where sign-in links point back to: the site's address, not the API's.
+      - key: APP_BASE_URL
+        sync: false
+
+      # Email delivery, for sign-in links and price alerts. Any SMTP provider
+      # works; leaving them unset just means no mail goes out.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+      # Shared secret for the scheduled alert sweep, so only your scheduler
+      # can trigger it. Generated once; paste the same value into the
+      # repository secret named CRON_SECRET.
+      - key: CRON_SECRET
+        generateValue: true
+
       - key: FUNDAMENTALS_CACHE_HOURS
         value: "24"
 
@@ -29,6 +61,8 @@ services:
       - key: VITE_API_BASE_URL
         sync: false
     routes:
+      # The sign-in link arrives as /signin?token=..., which is handled by the
+      # app rather than by a file on disk.
       - type: rewrite
         source: /*
         destination: /index.html

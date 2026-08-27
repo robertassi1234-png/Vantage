@@ -1,24 +1,32 @@
 # Vantage
 
 A personal stock research app: compare stock fundamentals side-by-side and track
-Fed policy sentiment over time. Single-user, local-only MVP.
+Fed policy sentiment over time. Works signed out with lists kept per browser;
+sign in with an emailed link to carry them across devices and get price alerts
+by email.
 
-- **Backend:** Python (FastAPI) + SQLite (used purely as a local cache/store)
+- **Backend:** Python (FastAPI) + SQLAlchemy over SQLite or Postgres
 - **Frontend:** React + TypeScript (Vite)
 
 ## Features
 
-0. **Dashboard** — a watchlist showing price, today's move and where each stock
+0. **Accounts (optional)** — sign in with a link emailed to you and your
+   watchlist, notes, comparison list and price alerts follow you to any
+   device. Signed out, everything is kept per browser and works the same.
+1. **Price alerts** — set a target price on anything you follow; Vantage
+   checks on every visit, and emails you when one crosses if a scheduler is
+   configured.
+2. **Dashboard** — a watchlist showing price, today's move and where each stock
    sits in its 52-week range; stat tiles for the S&P 500, Nasdaq, Dow and
    Russell 2000; and an interactive price chart (1M–5Y) for any watchlist name
    or index. Search accepts company names, not just tickers — typing "apple"
    finds AAPL.
-1. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
+3. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
    market cap, revenue/EPS growth, margins, debt/equity, ROE, dividend yield,
    and more in a sortable table. Data from [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs).
    Fundamentals are cached for 24h (configurable) so you don't burn API calls
    on every page load.
-2. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
+4. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
    (public RSS feed, no API key needed), summarizes tone (hawkish/dovish/neutral)
    and key takeaways using Claude Haiku, and shows a timeline. Refresh is
    **on-demand** (a button) rather than a background daily job — simpler to
@@ -32,6 +40,12 @@ Fed policy sentiment over time. Single-user, local-only MVP.
 - A free [Financial Modeling Prep API key](https://site.financialmodelingprep.com/developer/docs)
   (free tier: 250 calls/day)
 - An [Anthropic API key](https://console.anthropic.com/) for Claude Haiku
+
+Optional, and only for accounts and alert emails — see
+[Turning on accounts](#turning-on-accounts):
+
+- A Postgres database. [Neon](https://neon.tech)'s free tier works.
+- An SMTP provider. [Resend](https://resend.com)'s free tier works.
 
 ## Setup
 
@@ -48,8 +62,14 @@ uvicorn app.main:app --reload
 ```
 
 The API runs at `http://localhost:8000`. A SQLite file (`vantage.db` by
-default, see `VANTAGE_DB_PATH` in `.env`) is created automatically and holds
-your watchlist, cached fundamentals, and Fed statement history.
+default, see `DATABASE_URL` in `.env`) is created automatically and holds
+watchlists, price alerts, accounts, cached fundamentals, and Fed statement
+history. Point `DATABASE_URL` at a Postgres connection string instead and the
+same code runs unchanged.
+
+Signing in locally needs no mail account: with `SMTP_HOST` unset, the sign-in
+link comes back in the response and the account panel offers it as a link to
+click.
 
 ### Frontend
 
@@ -111,22 +131,120 @@ cache, so hammering it is the one way to burn through calls quickly.
 ## Deploying (Render, free tier)
 
 A `render.yaml` blueprint at the repo root deploys the backend as a web
-service and the frontend as a static site in one pass — see your chat with
-Claude for a click-by-click walkthrough. Two things worth knowing before you
-deploy:
+service and the frontend as a static site in one pass.
 
-- **CORS_ORIGINS** defaults to `*` in `render.yaml` so the deployed frontend
-  can call the deployed backend without you having to match URLs by hand.
-  Fine for a single-user personal app; tighten it to your frontend's exact
-  URL later if you want.
-- **Free tier storage is not persistent.** Render's free web services don't
-  have a persistent disk, so the SQLite file (your watchlist + cached
-  fundamentals + Fed timeline) resets whenever the service restarts — which
-  happens automatically after ~15 minutes of no traffic. Your data will
-  survive while you're actively using it in one sitting, but you may need to
-  re-add tickers next time you come back. To make it persistent, upgrade the
-  backend service to a paid "Starter" instance, add a Disk (mount path
-  `/var/data`), and set `VANTAGE_DB_PATH=/var/data/vantage.db`.
+The app works immediately after that, with lists kept per browser. Turning on
+accounts — one watchlist that follows you between devices, and price alerts
+that arrive by email — needs two free services and about ten minutes. See
+[Turning on accounts](#turning-on-accounts) below.
+
+**Free tier storage is not persistent.** Render's free web services have no
+disk, so without `DATABASE_URL` the SQLite file resets whenever the service
+restarts — which happens automatically after ~15 minutes of no traffic. That
+is fine for trying the app out, and it is why accounts need a real database.
+
+## Turning on accounts
+
+Three settings, in this order. The app tells you which one is missing: open
+the account menu in the header and it names the setting rather than failing
+quietly.
+
+### 1. A database that survives restarts
+
+[Neon](https://neon.tech) has a free Postgres tier with no card required and
+no 30-day expiry.
+
+1. Sign up, create a project, and copy the connection string it shows you (it
+   starts `postgresql://`).
+2. In Render, open **vantage-backend → Environment**, set `DATABASE_URL` to
+   that string, and save.
+
+Any Postgres works — Supabase, Render's own Postgres, or your own server. The
+app rewrites the older `postgres://` prefix that several providers still hand
+out, so paste whatever they give you.
+
+### 2. Name your site, so sign-in is allowed
+
+Set `CORS_ORIGINS` to your frontend's exact address, e.g.
+`https://vantage-frontend.onrender.com`, and `APP_BASE_URL` to the same value.
+
+This is not optional bookkeeping. Sessions live in a cookie, and allowing a
+cookie from *any* origin would let any website you visit read and change your
+watchlist. The app refuses to combine the two, so sign-in stays off until
+`CORS_ORIGINS` names a real address.
+
+`APP_BASE_URL` is where sign-in links point — the site's address, not the
+API's.
+
+### 3. Email delivery
+
+[Resend](https://resend.com) has a free tier of 3,000 emails a month, which
+is far more than sign-in links and price alerts will use.
+
+1. Sign up and create an API key.
+2. In Render, set:
+   - `SMTP_HOST` = `smtp.resend.com`
+   - `SMTP_PORT` = `587`
+   - `SMTP_USER` = `resend`
+   - `SMTP_PASSWORD` = your Resend API key
+   - `EMAIL_FROM` = `Vantage <onboarding@resend.dev>` (their shared sending
+     address — swap in your own domain later if you verify one)
+
+Any SMTP provider works; SendGrid, Mailgun, Postmark and Gmail all take the
+same four settings. Leave them unset and nothing breaks: sign-in links are
+written to the server log instead, which is how local development works.
+
+### 4. Alerts while the app is closed (optional)
+
+A price alert is checked whenever you open Vantage. To have one reach you
+when you are not looking, something outside the app has to ask it to check —
+a free instance is asleep, and a timer inside a sleeping process never fires.
+
+`.github/workflows/price-alerts.yml` does this from GitHub's scheduler, every
+30 minutes during US market hours. To enable it, add two repository secrets
+under **Settings → Secrets and variables → Actions**:
+
+- `VANTAGE_API_URL` — your backend's address, e.g.
+  `https://vantage-backend-mj3p.onrender.com`
+- `CRON_SECRET` — the value Render generated for the backend's `CRON_SECRET`
+  (Render shows it under Environment)
+
+Without both secrets the workflow exits quietly, so nothing fails while it is
+half-configured.
+
+## What accounts change
+
+- **Signed out** — lists key on a per-browser id, exactly as before. Nothing
+  about the app requires signing in.
+- **Signing in** — whatever that browser already saved moves onto the
+  account. Signing in on a second device merges rather than overwrites, so a
+  fresh browser can never erase the list you already have.
+- **Signed in** — the same watchlist, notes, comparison list and price alerts
+  appear on any device, and alerts arrive by email.
+
+Sign-in is a link emailed to you, not a password. Nothing reversible is
+stored: only a SHA-256 hash of a single-use token that expires in 20 minutes.
+An expired link and an unknown one give the same message, so neither confirms
+the other exists, and requests are rate limited per address so the endpoint
+cannot be used to flood an inbox.
+
+## Running the tests
+
+```bash
+cd backend && .venv/bin/python -m pytest      # backend
+cd frontend && npm test                       # frontend
+```
+
+The backend suite uses a throwaway SQLite file and needs no server. Because
+production runs on Postgres — and SQLite quietly accepts SQL that Postgres
+rejects — the same suite can be pointed at a real database:
+
+```bash
+VANTAGE_TEST_DATABASE_URL=postgresql://user@localhost/vantage_test \
+  .venv/bin/python -m pytest
+```
+
+This matters most for the migration code, which rewrites live tables.
 
 ## Project layout
 
@@ -135,12 +253,23 @@ backend/
   app/
     main.py           FastAPI app, CORS, router wiring
     config.py         Settings loaded from env vars
-    db.py             SQLite schema + cache/watchlist/timeline queries
+    engine.py         Database engine, SQLite or Postgres via DATABASE_URL
+    db.py             Schema, migrations, watchlist/cache/timeline queries
+    auth.py           Magic-link tokens and sessions
+    mailer.py         SMTP sending, with a log-only fallback
+    notifier.py       Firing alerts and emailing them
+    alerts.py         Price alert storage and evaluation
+    space.py          Resolves a request to an owner: account or browser
     fmp_client.py      Financial Modeling Prep API client
     fed_scraper.py     federalreserve.gov RSS + statement text scraper
     claude_client.py   Claude Haiku summarization
     routers/
-      stocks.py        /api/watchlist, /api/fundamentals
+      stocks.py        /api/lists, /api/fundamentals, /api/search
+      market.py        /api/market/quotes, /indices, /history
+      alerts.py        /api/alerts
+      auth.py          /api/auth/me, /request-link, /verify, /signout
+      notify.py        /api/notify/sweep, for the scheduler
+      portability.py   /api/export, /api/import
       fed.py           /api/fed/timeline, /api/fed/refresh
   requirements.txt
   .env.example
@@ -148,16 +277,18 @@ frontend/
   src/
     api.ts             Fetch wrappers for the backend
     types.ts           Shared TS types
-    pages/             ComparisonPage, FedTrackerPage
-    components/        StockTable
+    useAccount.ts      Sign-in state and what the server supports
+    pages/             DashboardPage, ComparisonPage, FedTrackerPage
+    components/        AccountMenu, WatchlistPanel, charts, StockTable
   .env.example
 ```
 
 ## Notes / next steps
 
-- This is a single-user app by design — no auth, no multi-tenancy. Don't
-  share the deployed frontend URL publicly if you'd rather keep your
-  watchlist private (there's no login screen).
+- The app is usable signed out, where lists key on a per-browser id. That id
+  travels in a header and is separation, not security: anyone holding it can
+  read that list. Sign in if you want your watchlist actually private, or
+  kept across devices.
 - If you want daily automatic Fed updates instead of the on-demand button,
   add a scheduler (e.g. `APScheduler`) that calls the same refresh logic in
   `app/routers/fed.py` on a timer.

@@ -237,8 +237,11 @@ class TestHousekeeping:
 class TestSetupReadiness:
     """Two ways a deployment can look fine and quietly lose accounts."""
 
-    def test_temporary_storage_is_reported(self, client):
+    def test_temporary_storage_is_reported(self, client, monkeypatch):
         """SQLite on a free instance is wiped by the next deploy."""
+        monkeypatch.setattr("app.routers.auth.is_postgres", lambda: False)
+        monkeypatch.setattr(settings, "cors_origins", "https://vantage.example.com")
+
         body = client.get("/api/auth/me").json()
         assert body["durable_storage"] is False
         assert body["accounts_available"] is False

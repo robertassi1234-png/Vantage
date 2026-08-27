@@ -1,0 +1,34 @@
+# Checks price alerts while nobody has the app open.
+#
+# A free instance sleeps, so a timer inside the app would never fire. GitHub's
+# scheduler lives outside it and an inbound request wakes it up, which is also
+# why the first call of the day can take a minute.
+name: Price alerts
+
+on:
+  schedule:
+    # Every 30 minutes during US market hours, Monday to Friday (UTC).
+    - cron: "*/30 13-21 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check alerts and send any that fired
+        env:
+          API_URL: ${{ secrets.VANTAGE_API_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$API_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "VANTAGE_API_URL or CRON_SECRET is not set; skipping."
+            exit 0
+          fi
+
+          # --max-time covers the cold start; the retries cover a sleeping
+          # instance that drops the first connection outright.
+          curl --fail --show-error --silent \
+               --retry 3 --retry-delay 20 --retry-connrefused \
+               --max-time 120 \
+               -X POST "${API_URL%/}/api/notify/sweep" \
+               -H "X-Cron-Secret: $CRON_SECRET"
