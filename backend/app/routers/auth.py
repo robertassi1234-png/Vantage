@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -31,6 +32,22 @@ class MeResponse(BaseModel):
     durable_storage: bool
     email_delivery: bool
     reason: str | None = None
+
+
+LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+
+
+def is_local_development() -> bool:
+    """Whether this server is someone's own machine rather than a real site.
+
+    Judged by where sign-in links point, since that is the address a person
+    actually browses to. A deployment always sets it to its public URL.
+    """
+    try:
+        host = urlparse(settings.app_base_url).hostname or ""
+    except ValueError:
+        return False
+    return host in LOCAL_HOSTS
 
 
 @router.get("/me")
@@ -93,9 +110,11 @@ def request_link(req: EmailRequest) -> dict:
             else "Email isn't configured on this server, so the link is in the server logs."
         ),
     }
-    # Without a mail provider there would be no way to sign in at all, which
-    # makes local development impossible. Only ever exposed when SMTP is unset.
-    if not delivered and not settings.smtp_host:
+    # Handing the link back in the response is what makes local development
+    # possible without a mail account. It must never happen on a public
+    # server: the endpoint takes any address and returns a working sign-in
+    # link for it, so exposing it would let anyone sign in as anyone.
+    if not delivered and is_local_development():
         response["dev_link"] = url
     return response
 

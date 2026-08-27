@@ -333,3 +333,72 @@ class TestCorsPatterns:
     def test_no_pattern_when_none_was_given(self, monkeypatch):
         monkeypatch.setattr(settings, "cors_origins", "https://vantage.example.com")
         assert settings.cors_origin_regex is None
+
+
+class TestDevLinkIsNeverPublic:
+    """The sign-in link must not come back in the response on a real site.
+
+    The endpoint accepts any address and mints a working link for it. Handing
+    that link to whoever asked would let anyone sign in as anyone, so it is
+    only ever returned when the server is plainly someone's own machine.
+    """
+
+    def test_a_public_server_withholds_the_link(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "smtp_host", "")
+        monkeypatch.setattr(settings, "app_base_url", "https://vantage.onrender.com")
+
+        body = client.post("/api/auth/request-link", json={"email": "victim@example.com"}).json()
+
+        assert "dev_link" not in body
+        assert "token" not in str(body)
+
+    def test_a_public_server_still_says_where_the_link_went(self, client, monkeypatch):
+        """Withholding it must not leave the reader with no idea what happened."""
+        monkeypatch.setattr(settings, "smtp_host", "")
+        monkeypatch.setattr(settings, "app_base_url", "https://vantage.onrender.com")
+
+        body = client.post("/api/auth/request-link", json={"email": "a@b.com"}).json()
+        assert "server logs" in body["message"]
+
+    def test_local_development_still_gets_the_link(self, client, monkeypatch):
+        """Otherwise there is no way to sign in locally without a mail account."""
+        monkeypatch.setattr(settings, "smtp_host", "")
+        monkeypatch.setattr(settings, "app_base_url", "http://localhost:5173")
+
+        body = client.post("/api/auth/request-link", json={"email": "a@b.com"}).json()
+        assert "dev_link" in body
+
+    @pytest.mark.parametrize(
+        "base_url",
+        ["http://127.0.0.1:5173", "http://localhost:3000", "http://[::1]:5173"],
+    )
+    def test_the_usual_local_addresses_all_count(self, client, monkeypatch, base_url):
+        monkeypatch.setattr(settings, "smtp_host", "")
+        monkeypatch.setattr(settings, "app_base_url", base_url)
+
+        body = client.post("/api/auth/request-link", json={"email": "a@b.com"}).json()
+        assert "dev_link" in body
+
+    @pytest.mark.parametrize(
+        "base_url",
+        [
+            "https://vantage.onrender.com",
+            # A hostname that merely contains "localhost" is not local.
+            "https://localhost.evil.com",
+            "https://not-localhost.example",
+        ],
+    )
+    def test_a_lookalike_hostname_does_not_count_as_local(self, client, monkeypatch, base_url):
+        monkeypatch.setattr(settings, "smtp_host", "")
+        monkeypatch.setattr(settings, "app_base_url", base_url)
+
+        body = client.post("/api/auth/request-link", json={"email": "a@b.com"}).json()
+        assert "dev_link" not in body
+
+    def test_a_configured_server_never_returns_the_link_either(self, client, monkeypatch):
+        monkeypatch.setattr(settings, "smtp_host", "smtp.example.com")
+        monkeypatch.setattr(settings, "app_base_url", "http://localhost:5173")
+        monkeypatch.setattr(mailer, "send", lambda *a, **k: True)
+
+        body = client.post("/api/auth/request-link", json={"email": "a@b.com"}).json()
+        assert "dev_link" not in body
