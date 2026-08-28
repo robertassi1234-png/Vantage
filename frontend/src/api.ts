@@ -2,6 +2,7 @@ import type {
   FedRefreshResult,
   FedStatement,
   FundamentalsRow,
+  JournalEntry,
   IndexQuote,
   PriceHistory,
   Quote,
@@ -19,6 +20,7 @@ import type {
   PeerSuggestions,
   MarketGroup,
   PositionsResponse,
+  JournalResponse,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -231,6 +233,28 @@ export const api = {
   undoSplit: (id: string) =>
     request<PositionsResponse>(`/api/positions/splits/${encodeURIComponent(id)}`, {
       method: "DELETE",
+    }),
+
+  getJournal: (ticker?: string) =>
+    request<JournalResponse>(
+      ticker ? `/api/journal?ticker=${encodeURIComponent(ticker)}` : "/api/journal",
+    ),
+
+  addJournalEntry: (
+    ticker: string,
+    entry: { body: string; tags: string[]; priceAtWrite: number | null },
+  ) =>
+    request<JournalResponse & { entry: JournalEntry }>(
+      `/api/journal/${encodeURIComponent(ticker)}`,
+      { method: "POST", body: JSON.stringify(entry) },
+    ),
+
+  deleteJournalEntry: (id: string) =>
+    request<JournalResponse>(`/api/journal/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  markJournalReviewed: (id: string) =>
+    request<JournalResponse>(`/api/journal/${encodeURIComponent(id)}/reviewed`, {
+      method: "POST",
     }),
 
   getFundamentals: (refresh = false) =>

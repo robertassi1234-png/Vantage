@@ -4,7 +4,17 @@ import { PositionDetail } from "./PositionDetail";
 import { money, signedPercent } from "./PortfolioSummary";
 import type { Portfolio } from "../positions";
 import { splitsFor } from "../positions";
-import type { Quote, SplitAdjustment, WatchlistEntry } from "../types";
+import { RowJournal } from "./RowJournal";
+import type { JournalEntry, Quote, SplitAdjustment, WatchlistEntry } from "../types";
+
+export interface JournalSupport {
+  entries: JournalEntry[];
+  suggestedTags: string[];
+  onWrite: (
+    ticker: string,
+    entry: { body: string; tags: string[]; priceAtWrite: number | null },
+  ) => Promise<void>;
+}
 
 export interface PositionActions {
   onAddLot: (
@@ -26,6 +36,8 @@ interface Props {
   portfolio?: Portfolio;
   splits?: SplitAdjustment[];
   positionActions?: PositionActions;
+  /** Writing a thesis from the row it is about, which is when it gets written. */
+  journal?: JournalSupport;
   onSelect: (symbol: string, label: string) => void;
   onRemove: (symbol: string) => void;
   onSaveNote: (symbol: string, note: string) => void | Promise<void>;
@@ -70,6 +82,7 @@ export function WatchlistPanel({
   portfolio,
   splits = [],
   positionActions,
+  journal,
   onSelect,
   onRemove,
   onSaveNote,
@@ -255,6 +268,17 @@ export function WatchlistPanel({
                 onDeleteLot={positionActions.onDeleteLot}
                 onApplySplit={(ratio) => positionActions.onApplySplit(q.symbol, ratio)}
                 onUndoSplit={positionActions.onUndoSplit}
+                journal={
+                  journal && (
+                    <RowJournal
+                      ticker={q.symbol}
+                      quote={quoteFor.get(q.symbol)}
+                      entries={journal.entries.filter((e) => e.ticker === q.symbol)}
+                      suggestedTags={journal.suggestedTags}
+                      onWrite={journal.onWrite}
+                    />
+                  )
+                }
               />
             )}
           </li>

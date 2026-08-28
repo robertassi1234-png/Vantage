@@ -8,6 +8,8 @@ interface Props {
   ticker: string;
   position: Position | undefined;
   splits: SplitAdjustment[];
+  /** Rendered under the trades, so one expander covers holding and thinking. */
+  journal?: React.ReactNode;
   onAddLot: (lot: { shares: number; costPerShare: number; tradeDate: string }) => Promise<void>;
   onDeleteLot: (id: string) => Promise<void>;
   onApplySplit: (ratio: number) => Promise<void>;
@@ -26,6 +28,7 @@ export function PositionDetail({
   ticker,
   position,
   splits,
+  journal,
   onAddLot,
   onDeleteLot,
   onApplySplit,
@@ -123,6 +126,8 @@ export function PositionDetail({
         onApply={onApplySplit}
         onUndo={onUndoSplit}
       />
+
+      {journal}
     </div>
   );
 }

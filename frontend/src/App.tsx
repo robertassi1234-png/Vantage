@@ -5,14 +5,16 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ComparisonPage } from "./pages/ComparisonPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { FedTrackerPage } from "./pages/FedTrackerPage";
+import { JournalPage } from "./pages/JournalPage";
 import { useAccount } from "./useAccount";
 import { THEMES, useTheme, type Theme } from "./useTheme";
 
-type Tab = "dashboard" | "comparison" | "fed";
+type Tab = "dashboard" | "comparison" | "journal" | "fed";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "dashboard", label: "Dashboard" },
   { id: "comparison", label: "Compare" },
+  { id: "journal", label: "Journal" },
   { id: "fed", label: "Fed Tracker" },
 ];
 
@@ -142,6 +144,7 @@ function App() {
           <ErrorBoundary key={tab}>
             {tab === "dashboard" && <DashboardPage />}
             {tab === "comparison" && <ComparisonPage />}
+            {tab === "journal" && <JournalPage />}
             {tab === "fed" && <FedTrackerPage />}
           </ErrorBoundary>
         </main>

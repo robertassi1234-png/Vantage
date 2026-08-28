@@ -67,3 +67,16 @@ class SplitRequest(BaseModel):
     """
 
     ratio: float
+
+
+class JournalRequest(BaseModel):
+    """A dated opinion about a company.
+
+    `priceAtWrite` is optional because the page usually already holds the
+    price the reader was looking at, which is the honest snapshot. Left out,
+    the server fetches one.
+    """
+
+    body: str
+    tags: list[str] = []
+    priceAtWrite: float | None = None

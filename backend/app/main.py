@@ -5,7 +5,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.db import init_db
-from app.routers import alerts, auth, fed, market, notify, portability, positions, stocks
+from app.routers import (
+    alerts,
+    auth,
+    fed,
+    journal,
+    market,
+    notify,
+    portability,
+    positions,
+    stocks,
+)
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +52,7 @@ app.include_router(stocks.router)
 app.include_router(market.router)
 app.include_router(alerts.router)
 app.include_router(positions.router)
+app.include_router(journal.router)
 app.include_router(notify.router)
 app.include_router(portability.router)
 app.include_router(fed.router)

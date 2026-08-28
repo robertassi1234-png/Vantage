@@ -39,6 +39,12 @@ function stubApi(over: Partial<typeof api> = {}) {
   });
   vi.spyOn(api, "getHistory").mockResolvedValue({ symbol: "X", range: "1Y", points: [] });
   vi.spyOn(api, "getPositions").mockResolvedValue({ lots: [], splits: [] });
+  vi.spyOn(api, "getJournal").mockResolvedValue({
+    entries: [],
+    review_due: [],
+    suggested_tags: ["thesis", "risk", "catalyst", "mistake"],
+    review_after_days: 90,
+  });
   vi.spyOn(api, "addToList").mockResolvedValue([]);
   vi.spyOn(api, "removeFromList").mockResolvedValue([]);
   vi.spyOn(api, "searchSymbols").mockResolvedValue([

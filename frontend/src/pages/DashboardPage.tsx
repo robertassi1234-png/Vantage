@@ -20,6 +20,7 @@ import {
   type Lot,
   type MarketGroup,
   type RangeKey,
+  type JournalEntry,
   type SplitAdjustment,
   type WatchlistEntry,
 } from "../types";
@@ -57,6 +58,8 @@ export function DashboardPage() {
   const [alerts, setAlerts] = useState<PriceAlert[]>(cached?.alerts ?? []);
   const [lots, setLots] = useState<Lot[]>(cached?.lots ?? []);
   const [splits, setSplits] = useState<SplitAdjustment[]>(cached?.splits ?? []);
+  const [journal, setJournal] = useState<JournalEntry[]>(cached?.journal ?? []);
+  const [journalTags, setJournalTags] = useState<string[]>([]);
 
   // Derived on every render rather than stored: a price refresh has to move
   // every figure at once, and a second copy of these numbers would be a
@@ -98,6 +101,15 @@ export function DashboardPage() {
           setSplits(p.splits);
         })
         .catch(() => {});
+      // Same reasoning: what you wrote about a company does not depend on the
+      // list, and a failure leaves the row exactly as it was before.
+      const journalPromise = api
+        .getJournal()
+        .then((j) => {
+          setJournal(j.entries);
+          setJournalTags(j.suggested_tags);
+        })
+        .catch(() => {});
 
       // Entries rather than bare tickers: the note lives alongside the symbol,
       // and one request beats two.
@@ -114,7 +126,7 @@ export function DashboardPage() {
 
       const alertResult = await alertPromise;
       if (alertResult) setAlerts(alertResult.alerts);
-      await positionsPromise;
+      await Promise.all([positionsPromise, journalPromise]);
 
       // Row trend lines are decoration on top of a row that already works, so
       // they load last and a failure is simply no line.
@@ -148,8 +160,8 @@ export function DashboardPage() {
   // next visit opens on the last thing this browser actually saw.
   useEffect(() => {
     if (loading || entries.length === 0) return;
-    writeSnapshot({ identity, entries, quotes, indices, board, alerts, trends, lots, splits });
-  }, [loading, identity, entries, quotes, indices, board, alerts, trends, lots, splits]);
+    writeSnapshot({ identity, entries, quotes, indices, board, alerts, trends, lots, splits, journal });
+  }, [loading, identity, entries, quotes, indices, board, alerts, trends, lots, splits, journal]);
 
   // Fetch history whenever the selected symbol or range changes.
   useEffect(() => {
@@ -244,6 +256,18 @@ export function DashboardPage() {
     onUndoSplit: async (id: string) => applyPositions(await api.undoSplit(id)),
   };
 
+  const journalSupport = {
+    entries: journal,
+    suggestedTags: journalTags,
+    onWrite: async (
+      ticker: string,
+      entry: { body: string; tags: string[]; priceAtWrite: number | null },
+    ) => {
+      const result = await api.addJournalEntry(ticker, entry);
+      setJournal(result.entries);
+    },
+  };
+
   // Cached prices, index tiles or the market strip all count: if any of them
   // rendered, the reader is looking at a usable page.
   const hasAnyData = quotes.length > 0 || indices.length > 0 || board.length > 0;
@@ -305,6 +329,7 @@ export function DashboardPage() {
         portfolio={portfolio}
         splits={splits}
         positionActions={positionActions}
+        journal={journalSupport}
         onSelect={showChart}
         onRemove={handleRemove}
         onSaveNote={handleSaveNote}

@@ -12,6 +12,7 @@ const base: Omit<Snapshot, "savedAt"> = {
   trends: {},
   lots: [],
   splits: [],
+  journal: [],
 };
 
 beforeEach(() => localStorage.clear());

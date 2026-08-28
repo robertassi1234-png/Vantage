@@ -69,6 +69,30 @@ export interface PositionsResponse {
   splits: SplitAdjustment[];
 }
 
+/**
+ * A dated opinion about a company, stamped with the price it was written at.
+ *
+ * `priceAtWrite` is captured once and never recomputed: it is the record the
+ * entry exists for, and recalculating it against a live price would erase it.
+ */
+export interface JournalEntry {
+  id: string;
+  ticker: string;
+  body: string;
+  priceAtWrite: number | null;
+  dateWritten: string;
+  tags: string[];
+  reviewedAt: string | null;
+}
+
+export interface JournalResponse {
+  entries: JournalEntry[];
+  /** Ids old enough to be worth revisiting and never revisited. */
+  review_due: string[];
+  suggested_tags: string[];
+  review_after_days: number;
+}
+
 export type AlertDirection = "above" | "below";
 
 export interface PriceAlert {

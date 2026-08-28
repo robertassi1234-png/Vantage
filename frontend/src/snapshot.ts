@@ -1,5 +1,6 @@
 import type {
   IndexQuote,
+  JournalEntry,
   Lot,
   MarketGroup,
   PriceAlert,
@@ -39,6 +40,7 @@ export interface Snapshot {
   trends: Record<string, number[]>;
   lots: Lot[];
   splits: SplitAdjustment[];
+  journal: JournalEntry[];
 }
 
 /**
@@ -59,6 +61,7 @@ function looksUsable(snapshot: Snapshot): boolean {
     snapshot.alerts,
     snapshot.lots,
     snapshot.splits,
+    snapshot.journal,
   ];
   if (!arrays.every(Array.isArray)) return false;
   // A snapshot with no watchlist saves nothing worth showing.

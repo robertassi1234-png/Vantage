@@ -69,10 +69,29 @@ SPLITS_SCHEMA = """
     )
 """
 
+# What you were thinking when you bought, and what the stock cost when you
+# thought it. The price is the point: an opinion recorded next to the price it
+# was formed at can be checked later, and one without cannot. It is stamped
+# once at write time and never recomputed -- recalculating it against today's
+# price would erase the only thing the entry was for.
+JOURNAL_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS journal (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        ticker TEXT NOT NULL,
+        body TEXT NOT NULL,
+        price_at_write DOUBLE PRECISION,
+        date_written TEXT NOT NULL,
+        tags TEXT NOT NULL,
+        reviewed_at TEXT
+    )
+"""
+
 TABLES = [
     WATCHLIST_SCHEMA,
     LOTS_SCHEMA,
     SPLITS_SCHEMA,
+    JOURNAL_SCHEMA,
     """
     CREATE TABLE IF NOT EXISTS alerts (
         id TEXT PRIMARY KEY,
@@ -151,6 +170,7 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)",
     "CREATE INDEX IF NOT EXISTS idx_lots_owner ON lots (owner_id, ticker)",
     "CREATE INDEX IF NOT EXISTS idx_splits_owner ON splits (owner_id, ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_journal_owner ON journal (owner_id, date_written)",
 ]
 
 
@@ -334,7 +354,7 @@ def transfer_owner(from_owner: str, to_owner: str) -> dict[str, int]:
     Rows the account already has win, so signing in on a second device can't
     clobber the list that is already there.
     """
-    moved = {"watchlist": 0, "alerts": 0, "lots": 0}
+    moved = {"watchlist": 0, "alerts": 0, "lots": 0, "journal": 0}
     with connect() as conn:
         existing = {
             (r["list_name"], r["ticker"])
@@ -389,6 +409,14 @@ def transfer_owner(from_owner: str, to_owner: str) -> dict[str, int]:
             q("UPDATE splits SET owner_id = :to WHERE owner_id = :from"),
             {"to": to_owner, "from": from_owner},
         )
+
+        # Journal entries move for the same reason as lots: each is a distinct
+        # thing written on a day, not a row that can be de-duplicated.
+        result = conn.execute(
+            q("UPDATE journal SET owner_id = :to WHERE owner_id = :from"),
+            {"to": to_owner, "from": from_owner},
+        )
+        moved["journal"] = result.rowcount or 0
 
     return moved
 
@@ -546,6 +574,88 @@ def _row_to_lot(row) -> dict:
         "tradeDate": row["trade_date"],
         "note": row["note"],
         "created_at": row["created_at"],
+    }
+
+
+# --- thesis journal ---
+
+def list_journal(owner_id: str, ticker: str | None = None) -> list[dict]:
+    """Entries newest first, which is how a journal is read."""
+    sql = "SELECT * FROM journal WHERE owner_id = :o"
+    params: dict = {"o": owner_id}
+    if ticker:
+        sql += " AND ticker = :t"
+        params["t"] = ticker
+    sql += " ORDER BY date_written DESC"
+
+    with connect() as conn:
+        return [_row_to_entry(r) for r in conn.execute(q(sql), params).mappings()]
+
+
+def add_journal_entry(
+    owner_id: str,
+    ticker: str,
+    body: str,
+    price_at_write: float | None,
+    tags: list[str],
+) -> dict:
+    entry_id = uuid.uuid4().hex
+    with connect() as conn:
+        conn.execute(
+            q(
+                "INSERT INTO journal "
+                "(id, owner_id, ticker, body, price_at_write, date_written, tags) "
+                "VALUES (:i, :o, :t, :b, :p, :d, :g)"
+            ),
+            {
+                "i": entry_id,
+                "o": owner_id,
+                "t": ticker,
+                "b": body,
+                "p": price_at_write,
+                "d": now_iso(),
+                "g": json.dumps(tags),
+            },
+        )
+    return get_journal_entry(owner_id, entry_id)
+
+
+def get_journal_entry(owner_id: str, entry_id: str) -> dict | None:
+    with connect() as conn:
+        row = conn.execute(
+            q("SELECT * FROM journal WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": entry_id},
+        ).mappings().first()
+        return _row_to_entry(row) if row else None
+
+
+def delete_journal_entry(owner_id: str, entry_id: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            q("DELETE FROM journal WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": entry_id},
+        )
+
+
+def mark_journal_reviewed(owner_id: str, entry_id: str) -> bool:
+    """Stamp an entry as revisited, so it stops being nudged about."""
+    with connect() as conn:
+        result = conn.execute(
+            q("UPDATE journal SET reviewed_at = :r WHERE owner_id = :o AND id = :i"),
+            {"r": now_iso(), "o": owner_id, "i": entry_id},
+        )
+        return bool(result.rowcount)
+
+
+def _row_to_entry(row) -> dict:
+    return {
+        "id": row["id"],
+        "ticker": row["ticker"],
+        "body": row["body"],
+        "priceAtWrite": row["price_at_write"],
+        "dateWritten": row["date_written"],
+        "tags": json.loads(row["tags"]) if row["tags"] else [],
+        "reviewedAt": row["reviewed_at"],
     }
 
 
