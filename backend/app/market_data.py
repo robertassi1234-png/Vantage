@@ -21,6 +21,7 @@ from app import (
     fmp_client,
     provider_health,
     stooq_client,
+    twelvedata_client,
     yahoo_client,
 )
 from app.config import settings
@@ -28,6 +29,7 @@ from app.fmp_client import FMPError
 from app.alphavantage_client import AlphaVantageError
 from app.finnhub_client import FinnhubError
 from app.stooq_client import StooqError
+from app.twelvedata_client import TwelveDataError
 from app.yahoo_client import YahooError
 
 log = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ PROVIDER_ERRORS = (
     StooqError,
     FinnhubError,
     AlphaVantageError,
+    TwelveDataError,
 )
 
 PROVIDERS = {
@@ -47,8 +50,10 @@ PROVIDERS = {
     # No key and no signup, so it is always available as a floor. Last,
     # because it carries no company names or 52-week range.
     "stooq": stooq_client,
-    # Optional, keyed. Skipped automatically when no key is set, because the
-    # client raises and the chain moves on.
+    # Optional, keyed. Skipped when no key is set, so the app runs on none,
+    # one or all of them. A key also sidesteps the address-reputation problem
+    # the keyless providers have on shared hosting.
+    "twelvedata": twelvedata_client,
     "finnhub": finnhub_client,
     "alphavantage": alphavantage_client,
 }
@@ -59,6 +64,7 @@ PROVIDERS = {
 REQUIRED_KEYS = {
     "fmp": "fmp_api_key",
     "finnhub": "finnhub_api_key",
+    "twelvedata": "twelve_data_api_key",
     "alphavantage": "alpha_vantage_api_key",
 }
 
@@ -73,7 +79,11 @@ def _order() -> list[str]:
     """Provider preference, from the PROVIDER_ORDER environment variable."""
     names = [n.strip().lower() for n in settings.provider_order.split(",") if n.strip()]
     valid = [n for n in names if n in PROVIDERS]
-    return valid or ["fmp"]
+    # Keyed providers not named in the order still serve as a backstop, so
+    # adding a key is enough to get a fallback without also editing the order.
+    return (valid or ["fmp"]) + [
+        n for n in PROVIDERS if n not in valid and n in REQUIRED_KEYS
+    ]
 
 
 def _summarise(failures: list[tuple[str, str]], benched: list[str]) -> str:

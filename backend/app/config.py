@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # set, so the app runs on none, one or all of them. More keys means the
     # comparison table keeps working after any single free tier is spent.
     finnhub_api_key: str = ""
+    twelve_data_api_key: str = ""
     alpha_vantage_api_key: str = ""
     anthropic_api_key: str = ""
     fundamentals_cache_hours: int = 24

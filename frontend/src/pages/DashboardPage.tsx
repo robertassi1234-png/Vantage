@@ -226,17 +226,21 @@ export function DashboardPage() {
         </div>
       )}
 
-      {board.length > 0 && (
-        <>
-          <h3 className="section-heading">
-            Under the surface
-            <span className="section-note">
-              How each part of the market is doing — click any for its chart
-            </span>
-          </h3>
-          <MarketBoard groups={board} onSelect={showChart} activeSymbol={chartSymbol} />
-        </>
-      )}
+      <h3 className="section-heading">
+        Under the surface
+        <span className="section-note">
+          How each part of the market is doing — click any for its chart
+        </span>
+      </h3>
+      {/* Rendered whether or not the data arrived. Hiding the section on an
+          empty response made a whole feature vanish during an outage, which
+          reads as "it was never built" rather than "prices are down". */}
+      <MarketBoard
+        groups={board}
+        loading={loading}
+        onSelect={showChart}
+        activeSymbol={chartSymbol}
+      />
 
       <h3 className="section-heading">
         Price alerts

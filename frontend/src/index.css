@@ -2185,3 +2185,22 @@ td.band-high {
     display: none;
   }
 }
+
+/* Placeholders while the board has nothing to show: the section holds its
+   place, so an outage reads as missing prices rather than a missing feature. */
+.board-grid-empty {
+  pointer-events: none;
+}
+
+.board-skeleton {
+  height: 148px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  opacity: 0.55;
+}
+
+.board-empty-note {
+  margin-top: 0.75rem;
+  text-align: center;
+}

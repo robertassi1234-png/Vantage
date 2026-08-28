@@ -139,6 +139,14 @@ answer:
 | 1 | **Yahoo** — no key, no published quota | **FMP** — 250/day, the fullest data |
 | 2 | **FMP** — 250/day | **Finnhub** — 60/min, no daily cap *(optional key)* |
 | 3 | **Stooq** — no key, no signup, coarser data | **Alpha Vantage** — 25/day *(optional key)* |
+| 4 | **Twelve Data** — 800/day *(optional key)* | |
+| 5 | **Finnhub** — 60/min *(optional key)* | |
+
+A key buys more than headroom on shared hosting. Yahoo throttles by address
+and that reputation is shared with every other tenant on the box, and Stooq
+refuses datacentre addresses outright — so the keyless providers can both be
+unavailable through no fault of your usage. A keyed provider is unaffected by
+who else is on the same machine.
 
 Two things make this work in practice rather than just on paper.
 
@@ -330,6 +338,7 @@ backend/
     yahoo_client.py    Yahoo Finance (no key)
     stooq_client.py    Stooq CSV (no key, no signup)
     finnhub_client.py  Finnhub (optional key)
+    twelvedata_client.py    Twelve Data (optional key)
     alphavantage_client.py  Alpha Vantage (optional key)
     fed_scraper.py     federalreserve.gov RSS + statement text scraper
     claude_client.py   Claude Haiku summarization

@@ -4,6 +4,7 @@ import type { MarketGroup } from "../types";
 
 interface Props {
   groups: MarketGroup[];
+  loading?: boolean;
   onSelect: (symbol: string, label: string) => void;
   activeSymbol?: string | null;
 }
@@ -45,7 +46,7 @@ function usePrefersReducedMotion(): boolean {
  * motion, and the dots below are always there to drive it by hand: motion
  * that cannot be stopped is a nuisance rather than a feature.
  */
-export function MarketBoard({ groups, onSelect, activeSymbol }: Props) {
+export function MarketBoard({ groups, loading = false, onSelect, activeSymbol }: Props) {
   const [page, setPage] = useState(0);
   const [paused, setPaused] = useState(false);
   const reducedMotion = usePrefersReducedMotion();
@@ -61,7 +62,25 @@ export function MarketBoard({ groups, onSelect, activeSymbol }: Props) {
     return () => window.clearInterval(timer.current);
   }, [advance, paused, reducedMotion, groups.length]);
 
-  if (groups.length === 0) return null;
+  if (groups.length === 0) {
+    // Shapes rather than nothing: the section keeps its place on the page, so
+    // a failed lookup reads as prices being down rather than the feature
+    // being absent.
+    return (
+      <div className="market-board">
+        <ul className="board-grid board-grid-empty">
+          {[0, 1, 2, 3].map((i) => (
+            <li key={i} className="board-skeleton" aria-hidden="true" />
+          ))}
+        </ul>
+        <p className="notice-line board-empty-note">
+          {loading
+            ? "Loading how each part of the market is doing…"
+            : "Market data is unavailable right now — this fills in as soon as prices come back."}
+        </p>
+      </div>
+    );
+  }
 
   const current = groups[Math.min(page, groups.length - 1)];
 

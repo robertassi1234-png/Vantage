@@ -80,9 +80,18 @@ describe("MarketBoard", () => {
     expect(screen.getByRole("button", { name: /Show its chart/i })).toBeInTheDocument();
   });
 
-  it("renders nothing when there is nothing to show", () => {
+  it("keeps its place on the page when there is nothing to show", () => {
+    // Hiding the section on an empty response made a whole feature vanish
+    // during an outage, which reads as never having been built.
     const { container } = setup({ groups: [] });
-    expect(container).toBeEmptyDOMElement();
+
+    expect(container.querySelectorAll(".board-skeleton")).toHaveLength(4);
+    expect(screen.getByText(/unavailable right now/i)).toBeInTheDocument();
+  });
+
+  it("says it is loading rather than that data is missing", () => {
+    setup({ groups: [], loading: true });
+    expect(screen.getByText(/loading how each part/i)).toBeInTheDocument();
   });
 
   it("hides the tabs when there is only one group", () => {
