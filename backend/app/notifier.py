@@ -10,6 +10,7 @@ Only signed-in owners get email -- an anonymous browser has no address to send
 to -- so their alerts still fire, they just surface in the UI instead.
 """
 
+import asyncio
 import logging
 
 from app import alerts as alerts_module
@@ -54,12 +55,12 @@ async def check_owner(owner_id: str, notify: bool = True) -> dict:
 
     emailed = 0
     if notify and fired:
-        emailed = _send(owner_id, fired)
+        emailed = await _send(owner_id, fired)
 
     return {"fired": fired, "checked": len(prices), "emailed": emailed, "error": None}
 
 
-def _send(owner_id: str, fired: list[dict]) -> int:
+async def _send(owner_id: str, fired: list[dict]) -> int:
     address = email_for_owner(owner_id)
     if not address:
         return 0
@@ -67,7 +68,11 @@ def _send(owner_id: str, fired: list[dict]) -> int:
     sent = 0
     for alert in fired:
         try:
-            delivered = mailer.send_alert(
+            # Sending blocks on a network round trip. Off the event loop, so a
+            # slow provider can't stall every other request on the server --
+            # a sweep may send a great many of these in a row.
+            delivered = await asyncio.to_thread(
+                mailer.send_alert,
                 address,
                 alert["ticker"],
                 alert["direction"],

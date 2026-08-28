@@ -36,8 +36,15 @@ services:
       - key: APP_BASE_URL
         sync: false
 
-      # Email delivery, for sign-in links and price alerts. Any SMTP provider
-      # works; leaving them unset just means no mail goes out.
+      # Email delivery, for sign-in links and price alerts.
+      #
+      # Prefer RESEND_API_KEY: free hosting blocks outbound SMTP ports to
+      # deter spam, so SMTP times out here no matter how it is configured.
+      # HTTPS is never blocked.
+      - key: RESEND_API_KEY
+        sync: false
+
+      # SMTP remains for anywhere that allows it, or another provider.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

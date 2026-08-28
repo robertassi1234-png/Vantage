@@ -1,11 +1,18 @@
-"""Outbound email over plain SMTP.
+"""Outbound email, over HTTPS where possible and SMTP otherwise.
 
-SMTP rather than a vendor SDK so Resend, SendGrid, Mailgun, Postmark or a
-personal Gmail all work by changing environment variables, with no code change
-and no library pinned to one provider.
+SMTP is the portable choice -- Resend, SendGrid, Mailgun, Postmark and a
+personal Gmail all work by changing environment variables, with no library
+pinned to one vendor. It has one fatal problem in practice: hosting providers
+block outbound SMTP ports to deter spam, and most free tiers do. The
+connection never opens, so every send simply times out.
 
-With SMTP_HOST unset, messages are logged instead of sent. That keeps local
-development and the whole test suite free of signups and of any risk of
+So Resend's HTTPS API is preferred when a key for it is available. Port 443 is
+never blocked, and the same account and sending address work either way. SMTP
+remains for anyone running somewhere that allows it, or using another
+provider.
+
+With neither configured, messages are logged instead of sent, which keeps
+local development and the whole test suite free of signups and of any risk of
 actually mailing someone.
 """
 
@@ -15,17 +22,36 @@ import ssl
 from email.message import EmailMessage
 from html import escape
 
+import httpx
+
 from app.config import settings
 
 log = logging.getLogger(__name__)
+
+RESEND_ENDPOINT = "https://api.resend.com/emails"
 
 
 class EmailError(Exception):
     pass
 
 
+def resend_api_key() -> str:
+    """The key to send over HTTPS with, if there is one.
+
+    An existing Resend setup already has the key -- in SMTP_PASSWORD, where it
+    is being used as the SMTP password. Reusing it means a deployment that is
+    timing out on a blocked SMTP port starts working without anyone having to
+    reconfigure anything.
+    """
+    if settings.resend_api_key:
+        return settings.resend_api_key
+    if "resend.com" in settings.smtp_host and settings.smtp_password.startswith("re_"):
+        return settings.smtp_password
+    return ""
+
+
 def is_configured() -> bool:
-    return bool(settings.smtp_host)
+    return bool(resend_api_key() or settings.smtp_host)
 
 
 def send(to: str, subject: str, body: str, html: str | None = None) -> bool:
@@ -41,6 +67,53 @@ def send(to: str, subject: str, body: str, html: str | None = None) -> bool:
         )
         return False
 
+    key = resend_api_key()
+    if key:
+        _send_via_resend(key, to, subject, body, html)
+        return True
+
+    return _send_via_smtp(to, subject, body, html)
+
+
+def _send_via_resend(
+    key: str, to: str, subject: str, body: str, html: str | None
+) -> None:
+    payload: dict = {
+        "from": settings.email_from,
+        "to": [to],
+        "subject": subject,
+        "text": body,
+    }
+    if html:
+        payload["html"] = html
+
+    try:
+        response = httpx.post(
+            RESEND_ENDPOINT,
+            headers={"Authorization": f"Bearer {key}"},
+            json=payload,
+            timeout=15,
+        )
+    except httpx.HTTPError as e:
+        raise EmailError(f"Couldn't reach the email service: {e}") from e
+
+    if response.status_code >= 400:
+        # The provider's own words are far more useful than a generic failure:
+        # an unverified sending domain and a bad key read very differently.
+        raise EmailError(f"Email service rejected the message: {_reason(response)}")
+
+
+def _reason(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return f"HTTP {response.status_code}"
+    if isinstance(body, dict):
+        return str(body.get("message") or body.get("error") or body)
+    return str(body)
+
+
+def _send_via_smtp(to: str, subject: str, body: str, html: str | None) -> bool:
     message = EmailMessage()
     message["From"] = settings.email_from
     message["To"] = to
@@ -60,7 +133,13 @@ def send(to: str, subject: str, body: str, html: str | None = None) -> bool:
                 server.starttls(context=ssl.create_default_context())
                 _login_and_send(server, message)
     except (smtplib.SMTPException, OSError) as e:
-        raise EmailError(f"Couldn't send email: {e}") from e
+        # A timeout here almost always means the host blocks outbound SMTP,
+        # which no amount of retrying will fix. Say so, rather than leaving
+        # whoever reads the log to guess at credentials.
+        raise EmailError(
+            f"Couldn't send email over SMTP: {e}. Many hosts block outbound SMTP "
+            f"ports; set RESEND_API_KEY to send over HTTPS instead."
+        ) from e
 
     return True
 

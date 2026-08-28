@@ -51,7 +51,7 @@ Optional, and only for accounts and alert emails — see
 [Turning on accounts](#turning-on-accounts):
 
 - A Postgres database. [Neon](https://neon.tech)'s free tier works.
-- An SMTP provider. [Resend](https://resend.com)'s free tier works.
+- An email provider. [Resend](https://resend.com)'s free tier works.
 
 ## Setup
 
@@ -206,16 +206,22 @@ is far more than sign-in links and price alerts will use.
 
 1. Sign up and create an API key.
 2. In Render, set:
-   - `SMTP_HOST` = `smtp.resend.com`
-   - `SMTP_PORT` = `587`
-   - `SMTP_USER` = `resend`
-   - `SMTP_PASSWORD` = your Resend API key
+   - `RESEND_API_KEY` = your Resend API key
    - `EMAIL_FROM` = `Vantage <onboarding@resend.dev>` (their shared sending
      address — swap in your own domain later if you verify one)
 
-Any SMTP provider works; SendGrid, Mailgun, Postmark and Gmail all take the
-same four settings. Leave them unset and nothing breaks: sign-in links are
-written to the server log instead, which is how local development works.
+**Use the API key, not SMTP.** Hosting providers block outbound SMTP ports to
+deter spam, and free tiers almost always do, so an SMTP setup that is entirely
+correct still fails with `timed out` — the connection never opens. Email over
+HTTPS goes out on port 443, which is never blocked.
+
+SMTP is still supported for anywhere that permits it, or for another provider —
+set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER` and `SMTP_PASSWORD` instead. If you
+already configured Resend that way, the key is reused automatically and
+nothing needs changing.
+
+Leave all of it unset and nothing breaks: sign-in links are written to the
+server log instead, which is how local development works.
 
 ### 4. Alerts while the app is closed (optional)
 
@@ -279,7 +285,7 @@ backend/
     engine.py         Database engine, SQLite or Postgres via DATABASE_URL
     db.py             Schema, migrations, watchlist/cache/timeline queries
     auth.py           Magic-link tokens and sessions
-    mailer.py         SMTP sending, with a log-only fallback
+    mailer.py         Email over HTTPS or SMTP, with a log-only fallback
     notifier.py       Firing alerts and emailing them
     alerts.py         Price alert storage and evaluation
     peers.py          Ranking peer suggestions for a comparison list

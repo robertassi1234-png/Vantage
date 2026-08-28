@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     # --- accounts and email ---
     # Where magic-link emails point back to.
     app_base_url: str = "http://localhost:5173"
+    # Resend over HTTPS. Preferred on hosting that blocks outbound SMTP ports
+    # to deter spam -- which most free tiers do, and where SMTP simply times
+    # out. Port 443 is never blocked, so this works where SMTP cannot.
+    resend_api_key: str = ""
+
     # Any SMTP provider works (Resend, SendGrid, Mailgun, Postmark).
     # Unset means emails are logged instead of sent, so local dev needs no key.
     smtp_host: str = ""
