@@ -14,14 +14,21 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     fmp_api_key: str = ""
+
+    # Optional extra market-data providers. Each is used only if its key is
+    # set, so the app runs on none, one or all of them. More keys means the
+    # comparison table keeps working after any single free tier is spent.
+    finnhub_api_key: str = ""
+    alpha_vantage_api_key: str = ""
     anthropic_api_key: str = ""
     fundamentals_cache_hours: int = 24
     cors_origins: str = "http://localhost:5173"
 
     # Providers tried in order for quotes, history and search. Yahoo has no
-    # published quota; FMP's free tier is 250 calls/day, so it sits behind as
-    # the fallback. Set to "fmp" alone to disable Yahoo entirely.
-    provider_order: str = "yahoo,fmp"
+    # published quota; FMP's free tier is 250 calls/day; Stooq needs no key at
+    # all but carries less detail, so it sits last as a floor. Reorder or trim
+    # this list to change which are used.
+    provider_order: str = "yahoo,fmp,stooq"
 
     # SQLite locally so the app runs with no signups; a Postgres URL in
     # production so accounts survive restarts and redeploys.

@@ -17,6 +17,13 @@ services:
 
       - key: FMP_API_KEY
         sync: false
+
+      # Optional extra market-data providers. Each is another free tier to
+      # fall through to when an earlier one runs out; leave blank to skip.
+      - key: FINNHUB_API_KEY
+        sync: false
+      - key: ALPHA_VANTAGE_API_KEY
+        sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
 

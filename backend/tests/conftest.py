@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from app import db, engine
+from app import db, engine, provider_health
 from app.config import settings
 
 # Everything here has to run on Postgres too, and SQLite quietly accepts SQL
@@ -41,6 +41,18 @@ def isolated_db(tmp_path, monkeypatch):
     db.init_db()
     yield
     engine.reset_engine()
+
+
+@pytest.fixture(autouse=True)
+def fresh_provider_health():
+    """Forget provider cooldowns between tests.
+
+    A rate-limit recorded by one case would otherwise bench that provider for
+    every case after it, producing failures nowhere near their cause.
+    """
+    provider_health.reset()
+    yield
+    provider_health.reset()
 
 
 @pytest.fixture(autouse=True)

@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException
 
-from app import db
+from app import db, market_data, provider_health
 from app.fmp_client import RANGE_DAYS, FMPError
 from app.market_data import fetch_history, fetch_quotes
 
@@ -22,6 +22,30 @@ INDICES = [
 QUOTE_TTL_SECONDS = 15 * 60
 HISTORY_TTL_SECONDS = 12 * 60 * 60
 SPARKLINE_POINTS = 30
+
+
+@router.get("/providers")
+def provider_status() -> dict:
+    """Which data providers are answering, and which are out of quota.
+
+    Exists so "why is the table empty?" has an answer that doesn't involve
+    reading server logs. Reports whether each provider is configured, since a
+    missing key and a spent allowance look identical from the outside.
+    """
+    statuses = provider_health.snapshot(list(market_data.PROVIDERS))
+    for status in statuses:
+        status["configured"] = market_data.is_configured(status["name"])
+        status["serves_fundamentals"] = (
+            status["name"] in market_data.FUNDAMENTALS_PROVIDERS
+        )
+
+    usable = [s for s in statuses if s["configured"] and s["available"]]
+    return {
+        "providers": statuses,
+        "order": market_data._order(),
+        "fundamentals_order": market_data._fundamentals_order(),
+        "healthy": len(usable),
+    }
 
 
 @router.get("/indices")

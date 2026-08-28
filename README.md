@@ -123,6 +123,35 @@ allows **250 API calls/day**, and everything is cached in SQLite:
 Normal use lands well under the limit. Clicking **Refresh** bypasses the quote
 cache, so hammering it is the one way to burn through calls quickly.
 
+## When a provider runs out
+
+Caching keeps usage low; falling through keeps the app working when it isn't
+low enough. Each request tries providers in order and takes the first real
+answer:
+
+| | Quotes, history, search | Fundamentals |
+|---|---|---|
+| 1 | **Yahoo** — no key, no published quota | **FMP** — 250/day, the fullest data |
+| 2 | **FMP** — 250/day | **Finnhub** — 60/min, no daily cap *(optional key)* |
+| 3 | **Stooq** — no key, no signup, coarser data | **Alpha Vantage** — 25/day *(optional key)* |
+
+Two things make this work in practice rather than just on paper.
+
+**A provider that says it is out of quota is set aside.** Otherwise every
+lookup pays for a round trip to rediscover it: fifty tickers, fifty refusals,
+fifty delays. A daily limit earns a long bench and a per-minute one a short
+bench, since those recover on their own. An ordinary error — a timeout, a 500
+— is *not* held against a provider, because one blip should not take a working
+source out of rotation.
+
+**Fundamentals have their own chain.** They were FMP-only, at four calls per
+ticker, which made a 250-a-day allowance the ceiling on the whole comparison
+table. Setting `FINNHUB_API_KEY` alone removes that ceiling; nothing else needs
+changing.
+
+`GET /api/market/providers` reports which are configured, which are benched,
+and for how long — so an empty table has an answer that isn't the server logs.
+
 ## Usage
 
 - **Stock Comparison tab:** type a ticker and hit Add. Fundamentals are
@@ -290,7 +319,13 @@ backend/
     alerts.py         Price alert storage and evaluation
     peers.py          Ranking peer suggestions for a comparison list
     space.py          Resolves a request to an owner: account or browser
+    market_data.py     Provider fallback chain for quotes, history, fundamentals
+    provider_health.py Benches a provider that reports being out of quota
     fmp_client.py      Financial Modeling Prep API client
+    yahoo_client.py    Yahoo Finance (no key)
+    stooq_client.py    Stooq CSV (no key, no signup)
+    finnhub_client.py  Finnhub (optional key)
+    alphavantage_client.py  Alpha Vantage (optional key)
     fed_scraper.py     federalreserve.gov RSS + statement text scraper
     claude_client.py   Claude Haiku summarization
     routers/
