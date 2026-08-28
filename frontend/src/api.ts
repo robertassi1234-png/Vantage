@@ -211,6 +211,13 @@ export const api = {
   getFundamentals: (refresh = false) =>
     request<FundamentalsRow[]>(`/api/fundamentals?refresh=${refresh}`),
 
+  getTrends: (symbols: string[]) =>
+    symbols.length === 0
+      ? Promise.resolve({} as Record<string, number[]>)
+      : request<Record<string, number[]>>(
+          `/api/market/trends?symbols=${encodeURIComponent(symbols.join(","))}`,
+        ),
+
   getMarketBoard: (refresh = false) =>
     request<MarketGroup[]>(`/api/market/board?refresh=${refresh}`),
 

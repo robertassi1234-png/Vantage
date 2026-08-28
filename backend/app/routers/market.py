@@ -144,6 +144,22 @@ async def get_indices(refresh: bool = False) -> list[dict]:
     return await _priced_tiles("indices", INDICES, refresh)
 
 
+@router.get("/trends")
+async def get_trends(symbols: str, refresh: bool = False) -> dict[str, list[float]]:
+    """Short close series per symbol, for the watchlist row trend lines.
+
+    Reads the same cache the sparklines already fill, so a watchlist whose
+    charts have been looked at costs nothing extra. Best-effort throughout: a
+    row simply has no line rather than the request failing.
+    """
+    wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()][:25]
+    if not wanted:
+        return {}
+
+    series = await asyncio.gather(*(_sparkline(symbol) for symbol in wanted))
+    return {symbol: points for symbol, points in zip(wanted, series) if points}
+
+
 @router.get("/board")
 async def get_board(refresh: bool = False) -> list[dict]:
     """The wider market, grouped into themes the strip rotates through."""

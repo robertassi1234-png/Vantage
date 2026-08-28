@@ -29,6 +29,7 @@ export function DashboardPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [indices, setIndices] = useState<IndexQuote[]>([]);
   const [board, setBoard] = useState<MarketGroup[]>([]);
+  const [trends, setTrends] = useState<Record<string, number[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [waking, setWaking] = useState(false);
@@ -76,6 +77,13 @@ export function DashboardPage() {
 
       const alertResult = await alertPromise;
       if (alertResult) setAlerts(alertResult.alerts);
+
+      // Row trend lines are decoration on top of a row that already works, so
+      // they load last and a failure is simply no line.
+      api
+        .getTrends(watchlist.map((e) => e.ticker))
+        .then(setTrends)
+        .catch(() => {});
 
       const [indexResult] = await marketPromise;
       const failure = [indexResult, quoteResult].find((r) => r.status === "rejected");
@@ -173,6 +181,10 @@ export function DashboardPage() {
     setAlerts(await api.acknowledgeAlert(id));
   }
 
+  // Cached prices, index tiles or the market strip all count: if any of them
+  // rendered, the reader is looking at a usable page.
+  const hasAnyData = quotes.length > 0 || indices.length > 0 || board.length > 0;
+
   return (
     <section>
       <div className="page-header">
@@ -190,7 +202,11 @@ export function DashboardPage() {
 
       <TickerSearch onSelect={handleAdd} disabled={loading} />
 
-      {error && (
+      {/* Only when the page has nothing to show. Each panel already says its
+          own piece -- the watchlist counts what it couldn't price, the market
+          strip says prices are unavailable -- so a red banner on top of that
+          makes a working page look broken. */}
+      {error && !hasAnyData && (
         <div className={`alert ${waking ? "alert-info" : "alert-error"}`}>
           <p>{error}</p>
           {waking && (
@@ -208,6 +224,7 @@ export function DashboardPage() {
       <WatchlistPanel
         entries={entries}
         quotes={quotes}
+        trends={trends}
         onSelect={showChart}
         onRemove={handleRemove}
         onSaveNote={handleSaveNote}

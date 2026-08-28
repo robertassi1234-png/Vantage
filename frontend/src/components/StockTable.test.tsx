@@ -154,6 +154,61 @@ describe("StockTable", () => {
       expect(screen.getByText(/FMP API key is missing or invalid/)).toBeInTheDocument();
     });
 
+    it("collapses one shared problem into a single line", () => {
+      // A rate limit makes every row report the same sentence. Six identical
+      // red lines under a table full of numbers reads as total failure.
+      const limited = "Market data is rate limited across every provider right now.";
+      render(
+        <StockTable
+          rows={[
+            row({ ticker: "AAPL", error: limited }),
+            row({ ticker: "MSFT", error: limited }),
+            row({ ticker: "AMZN", error: limited }),
+          ]}
+          onRemove={vi.fn()}
+        />,
+      );
+
+      expect(screen.getAllByText(new RegExp(limited.slice(0, 30)))).toHaveLength(1);
+      expect(screen.getByText("AAPL, MSFT, AMZN")).toBeInTheDocument();
+    });
+
+    it("keeps a different problem in its own words", () => {
+      // Collapsing must not hide an actionable failure behind a general one.
+      render(
+        <StockTable
+          rows={[
+            row({ ticker: "AAPL", error: "Market data is rate limited right now." }),
+            row({ ticker: "CRWV", error: "No data found for ticker 'CRWV'." }),
+          ]}
+          onRemove={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText(/rate limited/)).toBeInTheDocument();
+      expect(screen.getByText(/No data found/)).toBeInTheDocument();
+    });
+
+    it("says saved figures are shown when the numbers survived", () => {
+      const { container } = render(
+        <StockTable rows={[row({ error: "Rate limited." })]} onRemove={vi.fn()} />,
+      );
+
+      expect(container.querySelector(".note-stale")).not.toBeNull();
+      expect(screen.getByText(/Saved figures are shown above/)).toBeInTheDocument();
+    });
+
+    it("marks a row with nothing at all as an error, not stale data", () => {
+      const { container } = render(
+        <StockTable
+          rows={[{ ticker: "CRWV", error: "No data found." } as never]}
+          onRemove={vi.fn()}
+        />,
+      );
+
+      expect(container.querySelector(".note-error")).not.toBeNull();
+    });
+
     it("renders missing metrics as a dash, never NaN", () => {
       render(
         <StockTable

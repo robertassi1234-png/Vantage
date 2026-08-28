@@ -122,20 +122,50 @@ export function StockTable({ rows, onRemove }: Props) {
         </table>
       </div>
 
-      {rows.some((r) => r.error) && (
-        <div className="errors">
-          {rows
-            .filter((r) => r.error)
-            .map((r) => (
-              <p key={r.ticker} className="error-line">
-                {r.ticker}: {r.error}
-              </p>
-            ))}
-        </div>
-      )}
+      <TableNotes rows={rows} />
 
       <Legend />
     </>
+  );
+}
+
+/** Whether a row actually carries figures, or is only a ticker and a reason. */
+const hasFigures = (row: FundamentalsRow) =>
+  row.companyName != null || row.peRatio != null || row.marketCap != null;
+
+/**
+ * One line per distinct problem, rather than one per row.
+ *
+ * When a provider is rate limited every row reports the same sentence, and
+ * six identical red lines under a table full of numbers reads as total
+ * failure — when the figures are there and merely a few hours old. Grouping
+ * by message collapses that to one line without hiding anything: a genuinely
+ * different problem, like a rejected key, still gets said in its own words.
+ */
+function TableNotes({ rows }: { rows: FundamentalsRow[] }) {
+  const failed = rows.filter((r) => r.error);
+  if (failed.length === 0) return null;
+
+  const byMessage = new Map<string, FundamentalsRow[]>();
+  for (const row of failed) {
+    const message = row.error as string;
+    byMessage.set(message, [...(byMessage.get(message) ?? []), row]);
+  }
+
+  return (
+    <div className="table-notes">
+      {[...byMessage].map(([message, affected]) => {
+        // Rows that kept their cached figures are showing real numbers, just
+        // not fresh ones. That is a milder thing than a row with nothing.
+        const salvaged = affected.every(hasFigures);
+        return (
+          <p key={message} className={salvaged ? "note-stale" : "note-error"}>
+            <strong>{affected.map((r) => r.ticker).join(", ")}</strong> — {message}
+            {salvaged && " Saved figures are shown above."}
+          </p>
+        );
+      })}
+    </div>
   );
 }
 

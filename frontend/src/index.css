@@ -1,10 +1,13 @@
 :root {
   color-scheme: light;
 
-  --bg: #f3f4f8;
+  --bg: #f4f5f9;
   --surface: #ffffff;
-  --surface-2: #f8f9fc;
-  --border: #e6e8f0;
+  --surface-2: #f7f8fc;
+  --border: #e4e7f0;
+  /* A second, quieter border for dividers inside a card, so internal rules
+     don't carry the same weight as the card's own edge. */
+  --border-soft: #eef0f6;
   --text: #14161f;
   --muted: #6b7080;
   --muted-2: #9195a3;
@@ -30,8 +33,12 @@
   --radius-md: 12px;
   --radius-lg: 16px;
 
-  --shadow-sm: 0 1px 2px rgba(20, 22, 31, 0.06);
-  --shadow-md: 0 8px 24px -8px rgba(20, 22, 31, 0.16);
+  /* Three rungs rather than two: a resting card, a hovered one, and something
+     genuinely raised. Layered so the shadow reads as contact plus falloff
+     instead of one flat blur. */
+  --shadow-sm: 0 1px 2px rgba(20, 22, 31, 0.05), 0 1px 1px rgba(20, 22, 31, 0.03);
+  --shadow-md: 0 2px 4px rgba(20, 22, 31, 0.05), 0 8px 20px -6px rgba(20, 22, 31, 0.12);
+  --shadow-lg: 0 4px 8px rgba(20, 22, 31, 0.06), 0 20px 40px -12px rgba(20, 22, 31, 0.18);
 
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -40,10 +47,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0d0e14;
-    --surface: #161822;
-    --surface-2: #1c1f2b;
-    --border: #2a2d3a;
+    /* Surfaces sit further above the ground than they did: at #161822 on
+       #0d0e14 a card was barely distinguishable from the page, so the layout
+       read as one flat sheet. */
+    --bg: #0a0b10;
+    --surface: #15171f;
+    --surface-2: #1b1e28;
+    --border: #282b37;
+    --border-soft: #1f222c;
     --text: #eceef3;
     --muted: #9aa0b4;
     --muted-2: #6d7285;
@@ -65,17 +76,19 @@
     --band-high-bg: rgba(221, 154, 78, 0.16);
     --band-high-edge: #d99a52;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0d0e14;
-  --surface: #161822;
-  --surface-2: #1c1f2b;
-  --border: #2a2d3a;
+  --bg: #0a0b10;
+  --surface: #15171f;
+  --surface-2: #1b1e28;
+  --border: #282b37;
+  --border-soft: #1f222c;
   --text: #eceef3;
   --muted: #9aa0b4;
   --muted-2: #6d7285;
@@ -92,8 +105,9 @@
   --neutral: #9aa4b8;
   --neutral-soft: rgba(154, 164, 184, 0.14);
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 12px 28px -10px rgba(0, 0, 0, 0.55);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3), 0 10px 24px -8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.35), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
 }
 
 * {
@@ -415,7 +429,7 @@ button {
 .watch-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 100px 150px 190px;
+  grid-template-columns: 72px minmax(0, 1fr) 104px 100px 150px 190px;
   align-items: center;
   gap: 0.75rem;
   padding: 0.7rem 0.9rem;
@@ -980,6 +994,18 @@ button {
   font-size: 0.76rem;
   color: var(--muted-2);
   line-height: 1.6;
+}
+
+@media (max-width: 960px) {
+  /* The trend line is the first thing to go: it is context, where the price
+     and the day's move are the point of the row. */
+  .watch-main {
+    grid-template-columns: 72px minmax(0, 1fr) 100px 150px 190px;
+  }
+
+  .watch-spark {
+    display: none;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2203,4 +2229,179 @@ td.band-high {
 .board-empty-note {
   margin-top: 0.75rem;
   text-align: center;
+}
+
+/* --- watchlist trend line ---------------------------------------------- */
+
+.watch-spark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Recessive: the row's job is the price and the move, and the shape is
+     supporting context behind them. */
+  opacity: 0.75;
+}
+
+.watch-row:hover .watch-spark,
+.watch-row.active .watch-spark {
+  opacity: 1;
+}
+
+/* --- table notes -------------------------------------------------------- */
+
+.table-notes {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.85rem 0 0;
+  padding: 0.75rem 0.9rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+}
+
+.table-notes p {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+/* Saved figures are not an error: the numbers are real, just not fresh. */
+.note-stale {
+  color: var(--muted);
+}
+
+.note-error {
+  color: var(--hawkish);
+}
+
+/* ======================================================================
+   Refinement pass
+   ====================================================================== */
+
+/* Section headings were the same weight as body text, so the page read as one
+   undifferentiated column. A heavier, tighter heading with a lighter note
+   beside it gives the page a spine to scan. */
+.section-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin: 2.25rem 0 0.85rem;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.011em;
+}
+
+.section-note {
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--muted-2);
+}
+
+.page-header h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.page-subtitle {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+/* Cards read as objects on the page rather than outlines drawn on it: a
+   hairline that catches the light along the top edge, and a shadow with both
+   a contact term and a falloff term. */
+.card,
+.chart-card,
+.empty-state,
+.watchlist,
+.index-grid > *,
+.alerts-panel,
+.backup-panel,
+.table-wrap {
+  box-shadow: var(--shadow-sm);
+}
+
+.chart-card,
+.empty-state,
+.watchlist,
+.alerts-panel,
+.backup-panel {
+  position: relative;
+}
+
+/* A single top highlight, only in dark mode, where a flat fill has nothing to
+   separate it from the page behind it. */
+:root[data-theme="dark"] .chart-card::before,
+:root[data-theme="dark"] .watchlist::before,
+:root[data-theme="dark"] .empty-state::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06) 20%,
+    rgba(255, 255, 255, 0.06) 80%,
+    transparent
+  );
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .chart-card::before,
+  :root:not([data-theme="light"]) .watchlist::before,
+  :root:not([data-theme="light"]) .empty-state::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    border-radius: inherit;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.06) 20%,
+      rgba(255, 255, 255, 0.06) 80%,
+      transparent
+    );
+    pointer-events: none;
+  }
+}
+
+/* Rows separate with the softer rule, so the card's own edge stays the
+   strongest line in the group. */
+.watch-row {
+  border-bottom-color: var(--border-soft);
+  transition: background 0.14s ease;
+}
+
+.index-grid > * {
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.index-grid > *:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+/* The primary action should look like the primary action. */
+.btn {
+  font-weight: 550;
+  letter-spacing: -0.005em;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.app-header {
+  /* A hairline rather than a full border: the blur behind it already
+     separates the header from the page. */
+  border-bottom: 1px solid var(--border-soft);
 }

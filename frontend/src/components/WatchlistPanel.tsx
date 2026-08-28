@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
+import { Sparkline } from "./Sparkline";
 import type { Quote, WatchlistEntry } from "../types";
 
 interface Props {
   /** The watchlist itself. Rows come from here, never from the quotes. */
   entries: WatchlistEntry[];
   quotes: Quote[];
+  /** Recent closes per symbol, for the row trend line. Optional and best-effort. */
+  trends?: Record<string, number[]>;
   onSelect: (symbol: string, label: string) => void;
   onRemove: (symbol: string) => void;
   onSaveNote: (symbol: string, note: string) => void | Promise<void>;
@@ -45,6 +48,7 @@ function yearPosition(q: Quote): number | null {
 export function WatchlistPanel({
   entries,
   quotes,
+  trends = {},
   onSelect,
   onRemove,
   onSaveNote,
@@ -90,6 +94,21 @@ export function WatchlistPanel({
               <button className="watch-main" onClick={() => onSelect(q.symbol, q.name ?? q.symbol)}>
                 <span className="watch-symbol">{q.symbol}</span>
                 <span className="watch-name">{q.name ?? "Price unavailable"}</span>
+
+                {/* The row had a wide empty gap between the name and the
+                    price. A trend line is the most useful thing that can go
+                    there: it answers "and what has it been doing?" without a
+                    click. */}
+                <span className="watch-spark">
+                  {trends[q.symbol]?.length ? (
+                    <Sparkline
+                      values={trends[q.symbol]}
+                      direction={direction}
+                      width={96}
+                      height={26}
+                    />
+                  ) : null}
+                </span>
 
                 <span className="watch-price">{fmtPrice(q.price)}</span>
                 <span className="watch-delta">
