@@ -251,3 +251,41 @@ export interface MarketGroup {
   group: string;
   entries: MarketTile[];
 }
+
+
+/** One metric today, against the same company's own five-year record. */
+export interface MetricStat {
+  value: number | null;
+  median: number | null;
+  /** The trimmed low and high the range bar is drawn between. */
+  low: number | null;
+  high: number | null;
+  /** Where today sits in that record, 0 (lowest) to 1 (highest). */
+  percentile: number | null;
+  samples: number;
+}
+
+export interface ValuationCompany {
+  ticker: string;
+  companyName: string | null;
+  sector: string | null;
+  price: number | null;
+  metrics: Record<string, MetricStat>;
+  stale: boolean;
+  error: string | null;
+}
+
+export interface ValuationMetricDef {
+  key: string;
+  label: string;
+  /** Only set where the direction is unambiguous. Null means don't judge it. */
+  better: "high" | "low" | null;
+  percent: boolean;
+}
+
+export interface ValuationResponse {
+  companies: ValuationCompany[];
+  metrics: ValuationMetricDef[];
+  /** Median across the companies currently being compared, per metric. */
+  peerMedian: Record<string, number | null>;
+}

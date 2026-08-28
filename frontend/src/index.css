@@ -3284,3 +3284,145 @@ td.band-high {
   font-size: 0.85rem;
   color: var(--text);
 }
+
+/* ---------- Valuation in context ---------- */
+
+/* The table is wider than a phone and sometimes wider than a laptop, so it
+   scrolls inside its own box rather than pushing the page sideways. */
+.valuation-scroll {
+  overflow-x: auto;
+  background: var(--surface-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.valuation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.valuation-table th,
+.valuation-table td {
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--divider);
+}
+
+.valuation-table tbody tr:last-child th,
+.valuation-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.valuation-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.valuation-table .metric-col {
+  min-width: 11rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The one column that is not a company. Set apart by weight rather than a
+   rule, so it reads as a reference rather than another competitor. */
+.peer-col {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.metric-direction {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted-2);
+}
+
+.valuation-ticker {
+  display: block;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.valuation-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--muted);
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.valuation-value {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Tinted, not outlined -- and the star carries the same meaning for anyone
+   who cannot see the tint. */
+.valuation-table td.leading {
+  background: var(--dovish-soft);
+}
+
+.leader-mark {
+  margin-left: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--dovish);
+}
+
+.valuation-range {
+  display: block;
+  margin-top: 0.45rem;
+  min-width: 5.5rem;
+}
+
+.valuation-track {
+  position: relative;
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--divider);
+}
+
+/* The company's own five-year median: where it usually sits. */
+.valuation-median {
+  position: absolute;
+  top: -3px;
+  width: 1px;
+  height: 10px;
+  background: var(--muted-2);
+  transform: translateX(-0.5px);
+}
+
+.valuation-marker {
+  position: absolute;
+  top: -3px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--surface-raised);
+  transform: translateX(-5px);
+}
+
+.valuation-nocontext {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--muted-2);
+}
+
+@media (max-width: 720px) {
+  .valuation-table .metric-col {
+    min-width: 8.5rem;
+  }
+}

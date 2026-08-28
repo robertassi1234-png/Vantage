@@ -15,6 +15,7 @@ from app.routers import (
     portability,
     positions,
     stocks,
+    valuation,
 )
 
 log = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ app.include_router(market.router)
 app.include_router(alerts.router)
 app.include_router(positions.router)
 app.include_router(journal.router)
+app.include_router(valuation.router)
 app.include_router(notify.router)
 app.include_router(portability.router)
 app.include_router(fed.router)

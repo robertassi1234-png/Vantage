@@ -4,8 +4,15 @@ import { ComparisonChart, SERIES_COLORS, type ChartSeries } from "../components/
 import { PeerSuggestions } from "../components/PeerSuggestions";
 import { downloadCsv } from "../csv";
 import { StockTable } from "../components/StockTable";
+import { ValuationTable } from "../components/ValuationTable";
 import { TickerSearch } from "../components/TickerSearch";
-import { RANGES, type FundamentalsRow, type PeerSuggestion, type RangeKey } from "../types";
+import {
+  RANGES,
+  type FundamentalsRow,
+  type PeerSuggestion,
+  type RangeKey,
+  type ValuationResponse,
+} from "../types";
 
 export function ComparisonPage() {
   const [rows, setRows] = useState<FundamentalsRow[]>([]);
@@ -17,6 +24,10 @@ export function ComparisonPage() {
   const [series, setSeries] = useState<ChartSeries[]>([]);
   const [seriesLoading, setSeriesLoading] = useState(false);
   const [seriesError, setSeriesError] = useState<string | null>(null);
+
+  const [valuation, setValuation] = useState<ValuationResponse | null>(null);
+  const [valuationLoading, setValuationLoading] = useState(false);
+  const [valuationError, setValuationError] = useState<string | null>(null);
 
   const [peers, setPeers] = useState<PeerSuggestion[]>([]);
   const [peersLoading, setPeersLoading] = useState(false);
@@ -62,6 +73,34 @@ export function ComparisonPage() {
     };
   }, [tickers, range]);
 
+  // Five years of quarterly fundamentals is six provider calls per company,
+  // so this follows the list rather than the refresh button: it reloads when
+  // the companies change and otherwise leaves the day-old cache alone.
+  useEffect(() => {
+    if (!tickers) {
+      setValuation(null);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setValuationLoading(true);
+      setValuationError(null);
+      try {
+        const loaded = await api.getValuation();
+        if (!cancelled) setValuation(loaded);
+      } catch (e) {
+        if (!cancelled) setValuationError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setValuationLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tickers]);
+
   // Suggestions follow the list: adding a company changes what else is worth
   // looking at. Kept apart from the table load so a peer outage can't stop
   // the fundamentals rendering.
@@ -79,8 +118,12 @@ export function ComparisonPage() {
       try {
         const result = await api.getPeers();
         if (cancelled) return;
-        setPeers(result.suggestions);
-        setPeersError(result.error);
+        // Defended rather than trusted: a response without its suggestions
+        // list -- an older server, a proxy rewriting the body -- reached
+        // `peers.length` as undefined and took the whole page down, losing
+        // the fundamentals table over a sidebar of nice-to-haves.
+        setPeers(Array.isArray(result?.suggestions) ? result.suggestions : []);
+        setPeersError(result?.error ?? null);
       } catch (e) {
         if (!cancelled) {
           setPeers([]);
@@ -187,6 +230,28 @@ export function ComparisonPage() {
         </div>
       ) : (
         <StockTable rows={rows} onRemove={handleRemove} />
+      )}
+
+      {rows.length > 0 && (
+        <>
+          <h3 className="section-heading">
+            Valuation in context
+            <span className="section-note">
+              Each figure against the same company’s own last five years
+            </span>
+          </h3>
+
+          {valuationError ? (
+            <p className="notice-line">{valuationError}</p>
+          ) : (
+            <ValuationTable
+              companies={valuation?.companies ?? []}
+              metrics={valuation?.metrics ?? []}
+              peerMedian={valuation?.peerMedian ?? {}}
+              loading={valuationLoading}
+            />
+          )}
+        </>
       )}
 
       {rows.length > 0 && (peersLoading || peers.length > 0 || peersError) && (

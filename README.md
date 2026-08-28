@@ -283,6 +283,54 @@ under **Settings → Secrets and variables → Actions**:
 Without both secrets the workflow exits quietly, so nothing fails while it is
 half-configured.
 
+## Positions, journal, and valuation context
+
+Three things sit on top of the watchlist.
+
+**Cost basis.** A watchlist row can carry the trades behind it -- what you
+paid and when -- and everything else follows arithmetically: weighted average
+cost, market value, unrealised gain, today's move in money, and each holding's
+share of the portfolio. Trades are stored individually rather than as a
+"shares held" number, because adding to a position over time is normal and one
+number gets overwritten by the next buy with the basis lost. A sale is the
+same record with negative shares, which is where realised profit comes from.
+
+Share splits are the destructive case and are handled by hand: there is no
+corporate-actions feed here, and a position left unadjusted after a 4-for-1
+reports the loss of three quarters of its value. Every adjustment is recorded
+and can be undone exactly, because a ratio typed as 10 instead of 0.1 would
+otherwise leave every cost basis wrong with no way back.
+
+Positions travel with a sign-in and with an export, and appear in the summary
+strip above the watchlist only once something is actually held.
+
+**Thesis journal.** An entry is what you thought about a company on a
+particular day, stamped with the price it was worth that day. The stamp is the
+feature: it is taken once, never recomputed, and everything after it -- the
+return since writing, whether the thesis worked -- is measured against it.
+Entries are written from an expanded watchlist row or from the Journal tab,
+tagged, and filtered. Anything over ninety days old that was never revisited
+gets a nudge, which is what keeps the journal from becoming a place where
+opinions go to be forgotten.
+
+**Valuation in context.** The Compare tab reports twelve metrics against each
+company's own five-year quarterly record: what it is now, the company's median,
+and where today sits between them. A P/E of 30 is not information; a P/E of 30
+against a five-year median of 24 is. A peer-median column gives the same
+numbers a second reference point -- explicitly the median of the companies on
+screen, not an industry figure.
+
+Only margins, growth and dilution mark a leader. The lowest P/E in a group is
+as often the most troubled company as the best value, so the valuation
+multiples deliberately highlight nobody.
+
+Five years of quarterly fundamentals is six provider calls per company against
+a free plan's 250 a day, so this is cached for a day and a stale table is
+served in preference to an error when the quota runs out. The field names for
+the quarterly endpoints follow the spellings FMP has used across API
+generations and are read defensively; if a column comes back empty for every
+company, that is where to look.
+
 ## Why the first load is slow, and what helps
 
 A free instance stops after 15 minutes with no traffic, and starting it again
