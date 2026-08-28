@@ -29,6 +29,16 @@
   --band-high-bg: #fdf1e3;
   --band-high-edge: #dd9a4e;
 
+  /* A surface raised just enough to separate itself from the page without a
+     drawn edge. Everything that used to be a bordered box sits on this. */
+  --surface-raised: #ffffff;
+  --divider: rgba(20, 22, 31, 0.07);
+
+  /* One rhythm rather than a different gap each time: between major blocks,
+     and within one. */
+  --space-section: 2.75rem;
+  --space-block: 0.875rem;
+
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -55,6 +65,9 @@
     --surface-2: #1b1e28;
     --border: #282b37;
     --border-soft: #1f222c;
+    /* Lifted off the ground rather than outlined against it. */
+    --surface-raised: #14161e;
+    --divider: rgba(255, 255, 255, 0.06);
     --text: #eceef3;
     --muted: #9aa0b4;
     --muted-2: #6d7285;
@@ -2062,11 +2075,11 @@ td.band-high {
   box-shadow: var(--shadow-sm);
 }
 
+/* A quiet aside, not a label: the dots already say there are more pages. */
 .board-hint {
   color: var(--muted-2);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.72rem;
+  opacity: 0.7;
 }
 
 .board-grid {
@@ -2166,6 +2179,9 @@ td.band-high {
   color: var(--muted-2);
   font-size: 0.72rem;
   line-height: 1.4;
+  /* Pushed to the bottom of the tile so the trend line beneath it always
+     meets the card edge, whatever the blurb wraps to. */
+  margin-top: auto;
 }
 
 .board-dots {
@@ -2404,4 +2420,263 @@ td.band-high {
   /* A hairline rather than a full border: the blur behind it already
      separates the header from the page. */
   border-bottom: 1px solid var(--border-soft);
+}
+
+/* ======================================================================
+   Polish pass: fewer edges, one rhythm, numbers loudest
+   ====================================================================== */
+
+/* --- 2. The nav already names the page ---------------------------------
+   Keeping the heading in the DOM for screen readers and the document
+   outline, while the subtitle carries the visible line. A title repeated
+   two inches below the tab that says the same word is just noise. */
+.page-header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.page-header {
+  align-items: flex-start;
+  margin-bottom: 1.35rem;
+}
+
+.page-subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--muted);
+  letter-spacing: -0.005em;
+}
+
+/* --- 6. One vertical rhythm -------------------------------------------- */
+
+.section-heading {
+  margin: var(--space-section) 0 var(--space-block);
+}
+
+/* The first heading after the search box does not need a full section gap. */
+.ticker-search + .section-heading,
+.alert + .section-heading {
+  margin-top: 1.75rem;
+}
+
+/* --- 1 + 4. Lists get dividers; only tiles keep an edge ----------------- */
+
+.watchlist {
+  background: var(--surface-raised);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.watch-row {
+  border-bottom: 1px solid var(--divider);
+}
+
+.watch-row:last-child {
+  border-bottom: none;
+}
+
+.watch-row:hover {
+  background: var(--surface-2);
+}
+
+/* Corners have to follow the container now the rows draw the edges. */
+.watch-row:first-child,
+.watch-row:first-child .watch-line {
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.watch-row:last-child,
+.watch-row:last-child .watch-line {
+  border-bottom-left-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
+}
+
+/* Stat tiles are the exception: a distinct module, so they keep a surface
+   and lose only the drawn border. */
+.index-tile,
+.board-tile {
+  background: var(--surface-raised);
+  border: 1px solid transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.index-tile:hover,
+.board-tile:hover {
+  border-color: var(--divider);
+  box-shadow: var(--shadow-md);
+}
+
+.index-tile.active,
+.board-tile.active {
+  border-color: var(--accent);
+}
+
+/* --- 3. The number is the loudest thing on the tile --------------------- */
+
+.index-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.tile-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Labels sit under the number in weight as well as size: at the same weight
+   as body text they competed with the figure they describe. */
+.index-label,
+.tile-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.003em;
+}
+
+.index-blurb,
+.tile-blurb {
+  font-size: 0.75rem;
+  color: var(--muted-2);
+}
+
+.index-delta,
+.tile-delta {
+  font-size: 0.78rem;
+}
+
+/* --- 7. Sparklines bleed to the tile edge ------------------------------- */
+
+.index-tile,
+.board-tile {
+  /* Padding stays on the text; the trend line is pulled out to the edges so
+     it reads as part of the card rather than a floating thumbnail. */
+  overflow: hidden;
+}
+
+.index-spark,
+.tile-spark {
+  display: block;
+  margin: 0.5rem -1.05rem -0.95rem;
+}
+
+.index-spark svg,
+.tile-spark svg {
+  width: 100%;
+  display: block;
+}
+
+/* --- 5. Loading reads as loading --------------------------------------- */
+
+.shimmer {
+  display: inline-block;
+  min-width: 3.5rem;
+  height: 0.85em;
+  vertical-align: middle;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    var(--border) 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 50%;
+  }
+  to {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer {
+    animation: none;
+  }
+}
+
+.board-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  height: auto;
+  min-height: 148px;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--surface-raised);
+  border: none;
+  box-shadow: var(--shadow-sm);
+  opacity: 1;
+}
+
+.shimmer-label {
+  width: 45%;
+  height: 0.75rem;
+}
+
+.shimmer-value {
+  width: 62%;
+  height: 1.4rem;
+}
+
+.shimmer-spark {
+  margin-top: auto;
+  width: 100%;
+  height: 2.1rem;
+}
+
+/* An empty state that looks considered rather than unfinished. */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--surface-raised);
+  border: none;
+  box-shadow: var(--shadow-sm);
+}
+
+.empty-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.35rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* --- odds and ends ----------------------------------------------------- */
+
+/* The strip's own tabs are a control, not a card. */
+.board-tabs {
+  background: var(--surface-2);
+  border: 1px solid var(--divider);
+}
+
+.table-wrap,
+.chart-card,
+.alerts-panel,
+.backup-panel {
+  border-color: var(--divider);
+}
+
+/* The company name is unknown until a quote lands, and repeating the ticker
+   beside itself said nothing. */
+.shimmer-name {
+  width: 9rem;
+  max-width: 60%;
 }

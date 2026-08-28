@@ -62,8 +62,14 @@ export function WatchlistPanel({
   if (entries.length === 0) {
     return (
       <div className="empty-state">
+        <span className="empty-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+               strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 17l5-6 4 4 5-7 4 5" />
+          </svg>
+        </span>
         <p className="empty-title">Your watchlist is empty</p>
-        <p>Search for a company above to add it. You'll see its price, today's move, and where it sits in its 52-week range.</p>
+        <p>Search for a company above to see its price, today's move, and where it sits in its 52-week range.</p>
       </div>
     );
   }
@@ -93,7 +99,9 @@ export function WatchlistPanel({
             <div className="watch-line">
               <button className="watch-main" onClick={() => onSelect(q.symbol, q.name ?? q.symbol)}>
                 <span className="watch-symbol">{q.symbol}</span>
-                <span className="watch-name">{q.name ?? "Price unavailable"}</span>
+                <span className="watch-name">
+                  {q.name ?? <span className="shimmer shimmer-name" />}
+                </span>
 
                 {/* The row had a wide empty gap between the name and the
                     price. A trend line is the most useful thing that can go
@@ -110,7 +118,9 @@ export function WatchlistPanel({
                   ) : null}
                 </span>
 
-                <span className="watch-price">{fmtPrice(q.price)}</span>
+                <span className="watch-price">
+                  {q.price == null ? <span className="shimmer" /> : fmtPrice(q.price)}
+                </span>
                 <span className="watch-delta">
                   <span aria-hidden="true">
                     {direction === "down" ? "▼" : direction === "up" ? "▲" : "■"}

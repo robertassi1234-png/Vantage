@@ -326,3 +326,50 @@ describe("notes", () => {
     expect(screen.getByText("apple note")).toBeInTheDocument();
   });
 });
+
+describe("loading and empty states", () => {
+  it("shimmers a row that has no quote yet, rather than saying it failed", () => {
+    // "Price unavailable" against a blank row read as broken; the price is
+    // usually just still in flight.
+    const { container } = render(
+      <WatchlistPanel
+        entries={entries("AAPL")}
+        quotes={[]}
+        onSelect={vi.fn()}
+        onRemove={vi.fn()}
+        onSaveNote={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelectorAll(".shimmer").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/price unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("still names the ticker while the quote is in flight", () => {
+    render(
+      <WatchlistPanel
+        entries={entries("AAPL")}
+        quotes={[]}
+        onSelect={vi.fn()}
+        onRemove={vi.fn()}
+        onSaveNote={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("AAPL")).toBeInTheDocument();
+  });
+
+  it("gives the empty state something to look at", () => {
+    const { container } = render(
+      <WatchlistPanel
+        entries={[]}
+        quotes={[]}
+        onSelect={vi.fn()}
+        onRemove={vi.fn()}
+        onSaveNote={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector(".empty-mark")).not.toBeNull();
+    expect(screen.getByText(/watchlist is empty/i)).toBeInTheDocument();
+  });
+});

@@ -70,13 +70,17 @@ export function MarketBoard({ groups, loading = false, onSelect, activeSymbol }:
       <div className="market-board">
         <ul className="board-grid board-grid-empty">
           {[0, 1, 2, 3].map((i) => (
-            <li key={i} className="board-skeleton" aria-hidden="true" />
+            <li key={i} className="board-skeleton" aria-hidden="true">
+              <span className="shimmer shimmer-label" />
+              <span className="shimmer shimmer-value" />
+              <span className="shimmer shimmer-spark" />
+            </li>
           ))}
         </ul>
         <p className="notice-line board-empty-note">
           {loading
             ? "Loading how each part of the market is doing…"
-            : "Market data is unavailable right now — this fills in as soon as prices come back."}
+            : "Prices are unavailable right now — this fills in as soon as they return."}
         </p>
       </div>
     );
@@ -108,7 +112,7 @@ export function MarketBoard({ groups, loading = false, onSelect, activeSymbol }:
         </div>
         {!reducedMotion && groups.length > 1 && (
           <span className="board-hint" aria-hidden="true">
-            {paused ? "paused" : "rotating"}
+            {paused ? "paused" : "auto"}
           </span>
         )}
       </div>
@@ -143,11 +147,11 @@ export function MarketBoard({ groups, loading = false, onSelect, activeSymbol }:
                   {fmtPercent(entry.changePercent)}
                 </span>
 
-                <span className="tile-spark">
-                  <Sparkline values={entry.sparkline} direction={tone} width={132} height={34} />
-                </span>
-
                 <span className="tile-blurb">{entry.blurb}</span>
+
+                <span className="tile-spark">
+                  <Sparkline values={entry.sparkline} direction={tone} width={132} height={34} bleed />
+                </span>
               </button>
             </li>
           );

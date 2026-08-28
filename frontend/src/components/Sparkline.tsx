@@ -4,6 +4,8 @@ interface Props {
   direction?: "up" | "down" | "flat";
   width?: number;
   height?: number;
+  /** Stretch to whatever width the container gives it, edge to edge. */
+  bleed?: boolean;
 }
 
 /**
@@ -14,7 +16,13 @@ interface Props {
  * line doubles back under it, and a faint wash under the line gives the shape
  * some weight at this size without competing with the value above it.
  */
-export function Sparkline({ values, direction = "flat", width = 120, height = 32 }: Props) {
+export function Sparkline({
+  values,
+  direction = "flat",
+  width = 120,
+  height = 32,
+  bleed = false,
+}: Props) {
   if (values.length < 2) {
     return <div className="sparkline-empty" style={{ width, height }} aria-hidden="true" />;
   }
@@ -41,14 +49,28 @@ export function Sparkline({ values, direction = "flat", width = 120, height = 32
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      // Letterboxing is the default, which leaves a stretched sparkline
+      // floating in the middle of its card instead of meeting the edges.
+      preserveAspectRatio={bleed ? "none" : undefined}
       role="img"
       aria-label={`Trend over the last ${values.length} sessions, ${direction}`}
     >
       <path className="sparkline-area" d={area} stroke="none" />
-      <path d={path} fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={path}
+        fill="none"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        // Keeps the line 1.5px however far the viewBox is stretched.
+        vectorEffect={bleed ? "non-scaling-stroke" : undefined}
+      />
       {/* Ringed in the surface colour so the end point survives a line that
-          doubles back beneath it. */}
-      <circle cx={lastX} cy={lastY} r={3} className="sparkline-dot" strokeWidth={2} />
+          doubles back beneath it. Dropped when stretched, where a circle
+          would be squashed into an ellipse. */}
+      {!bleed && (
+        <circle cx={lastX} cy={lastY} r={3} className="sparkline-dot" strokeWidth={2} />
+      )}
     </svg>
   );
 }

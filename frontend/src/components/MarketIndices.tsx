@@ -38,7 +38,7 @@ export function MarketIndices({ indices, onSelect, activeSymbol }: Props) {
               <span aria-hidden="true">{direction === "down" ? "▼" : direction === "up" ? "▲" : "■"}</span>{" "}
               {fmtChange(index.change)} ({fmtPercent(pct)})
             </span>
-            <Sparkline values={index.sparkline} direction={direction} />
+            <Sparkline values={index.sparkline} direction={direction} width={200} height={40} bleed />
           </button>
         );
       })}
