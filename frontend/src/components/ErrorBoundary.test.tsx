@@ -74,3 +74,28 @@ describe("ErrorBoundary", () => {
     );
   });
 });
+
+describe("recovering from a crash the cached page caused", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("drops the snapshot, so reloading is not the same crash again", () => {
+    // The seeded page comes from storage that survives a reload. Left in
+    // place, a snapshot that breaks the render breaks every reload after it,
+    // and the reader has no way out of it.
+    localStorage.setItem("vantage.snapshot.v1", JSON.stringify({ identity: "a", savedAt: Date.now() }));
+
+    const Boom = () => {
+      throw new Error("cannot read properties of undefined");
+    };
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    quiet.mockRestore();
+
+    expect(screen.getByText(/Something went wrong/i)).toBeInTheDocument();
+    expect(localStorage.getItem("vantage.snapshot.v1")).toBeNull();
+  });
+});

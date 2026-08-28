@@ -1,3 +1,7 @@
+import pathlib
+import subprocess
+import sys
+
 import anthropic
 import httpx
 import pytest
@@ -36,7 +40,7 @@ def install(monkeypatch, *, text=None, error=None):
         def __init__(self, **kwargs):
             self.messages = FakeMessages()
 
-    monkeypatch.setattr(claude_client.anthropic, "Anthropic", FakeClient)
+    monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
 
 
 def api_error(cls, message):
@@ -93,7 +97,7 @@ class TestSummarize:
             def __init__(self, **kwargs):
                 self.messages = FakeMessages()
 
-        monkeypatch.setattr(claude_client.anthropic, "Anthropic", FakeClient)
+        monkeypatch.setattr(anthropic, "Anthropic", FakeClient)
         summarize_statement("x" * 50_000)
         assert len(captured["messages"][0]["content"]) == 12_000
 
@@ -139,3 +143,38 @@ class TestErrorMessages:
         )
         with pytest.raises(SummarizationError, match="Couldn't reach"):
             summarize_statement("text")
+
+
+class TestStartupCost:
+    """The SDK is loaded on demand, not when the app boots.
+
+    A reader who never opens the Fed tracker should not wait for it. The
+    saving is around a tenth of a second, which is worth having and easy to
+    lose: a plain `import anthropic` at the top of this module would put the
+    cost back on every cold start without anything failing, so the guarantee
+    is asserted rather than assumed.
+    """
+
+    def test_importing_the_app_does_not_load_the_sdk(self):
+        source = pathlib.Path(claude_client.__file__).read_text()
+        assert "\nimport anthropic\n" not in source
+
+        probe = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; import app.main; "
+                "print('anthropic' in sys.modules)",
+            ],
+            capture_output=True,
+            text=True,
+            cwd=pathlib.Path(claude_client.__file__).parent.parent,
+        )
+        assert probe.returncode == 0, probe.stderr
+        assert probe.stdout.strip() == "False", probe.stdout
+
+    def test_the_summariser_still_gets_a_working_sdk(self, monkeypatch):
+        claude_client.anthropic = None
+        install(monkeypatch, text=GOOD_JSON)
+        assert claude_client.summarize_statement("text")["sentiment"] == "hawkish"
+        assert claude_client.anthropic is anthropic

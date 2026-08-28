@@ -1,0 +1,50 @@
+# Keeps the backend awake so a visitor never waits for a cold start.
+#
+# Free hosting stops the instance after 15 minutes with no requests, and
+# starting it again takes most of a minute -- long enough that a first-time
+# visitor assumes the site is broken. A request every ten minutes keeps the
+# instance inside that window, so it is already running when someone arrives.
+#
+# The budget works out: a free plan allows 750 instance-hours a month and a
+# month is about 730 hours, so one always-on service fits with room to spare.
+# A second always-on service would not -- the frontend here is a static site,
+# which does not consume instance-hours.
+#
+# GitHub's scheduler is best-effort and skips runs when it is busy, so treat
+# this as a floor rather than a guarantee. An external uptime pinger
+# (UptimeRobot, cron-job.org -- both free) fires far more reliably, and either
+# can hit the same URL. Paying for a plan that never sleeps is the only way to
+# remove the cold start entirely.
+name: Keep warm
+
+on:
+  schedule:
+    # Every ten minutes, which leaves headroom inside the 15-minute idle
+    # timeout for a run that GitHub delays.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+# A queued run is worthless once a newer one exists: they do the same thing.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake the backend
+        env:
+          API_URL: ${{ secrets.VANTAGE_API_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "VANTAGE_API_URL is not set; skipping."
+            exit 0
+          fi
+
+          # --max-time covers a cold start we lost the race on; the retries
+          # cover a sleeping instance that drops the first connection outright.
+          curl --fail --show-error --silent \
+               --retry 3 --retry-delay 15 --retry-connrefused \
+               --max-time 120 \
+               "${API_URL%/}/api/health"

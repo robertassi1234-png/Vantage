@@ -2680,3 +2680,40 @@ td.band-high {
   width: 9rem;
   max-width: 60%;
 }
+
+/* --- serving the last visit while the server wakes ---------------------- */
+
+.stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.1rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* A slow pulse rather than a spinner: something is happening, but nothing is
+   blocked on it. */
+.stale-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: stale-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes stale-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stale-dot {
+    animation: none;
+  }
+}

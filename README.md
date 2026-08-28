@@ -283,6 +283,41 @@ under **Settings → Secrets and variables → Actions**:
 Without both secrets the workflow exits quietly, so nothing fails while it is
 half-configured.
 
+## Why the first load is slow, and what helps
+
+A free instance stops after 15 minutes with no traffic, and starting it again
+takes most of a minute. That is the whole of the delay: the app's own startup
+is about three seconds of it, and no amount of code makes a stopped container
+start faster. So there are two separate fixes, and they solve different halves
+of the problem.
+
+**The page no longer waits for it.** Each successful load is saved in the
+browser, and the next visit paints that immediately -- watchlist, prices,
+sparklines, sector board -- with a line saying how old the figures are while
+fresh ones load underneath. A returning reader sees a full page at once even
+with the server completely unreachable. It does nothing for a first-time
+visitor, who has nothing saved.
+
+**Keeping the instance awake fixes it for everyone.** Pick one:
+
+- `.github/workflows/keep-warm.yml`, already in this repository, requests
+  `/api/health` every ten minutes. It needs only the `VANTAGE_API_URL` secret
+  above, and exits quietly without it. Free, but GitHub's scheduler is
+  best-effort and skips runs when it is busy, so some visits will still be
+  slow.
+- An uptime pinger -- [UptimeRobot](https://uptimerobot.com) or
+  [cron-job.org](https://cron-job.org), both free -- pointed at the same
+  `/api/health` URL every 10 minutes. More reliable than GitHub's cron and
+  takes about two minutes to set up. This is the one to use if you are
+  sharing the app with anyone.
+- Render's Starter plan, $7/month, never sleeps. The only option that removes
+  the cold start entirely rather than mostly.
+
+The budget works out for the pingers: a free plan allows 750 instance-hours a
+month and a month is about 730 hours, so one always-on service fits. The
+frontend is a static site and does not consume instance-hours. Waking a second
+free web service around the clock would not fit.
+
 ## What accounts change
 
 - **Signed out** — lists key on a per-browser id, exactly as before. Nothing

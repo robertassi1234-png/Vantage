@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCurrentAccount } from "../AccountContext";
 import { ApiError, api } from "../api";
+import { describeAge, readSnapshot, writeSnapshot } from "../snapshot";
 import { MarketBoard } from "../components/MarketBoard";
 import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
@@ -21,15 +22,24 @@ import {
 
 export function DashboardPage() {
   const account = useCurrentAccount();
+  // Keyed on who this is, so signing out never leaves the previous account's
+  // watchlist on screen.
+  const identity = account.signed_in ? (account.email ?? "account") : "anonymous";
+  const cached = useMemo(() => readSnapshot(identity), [identity]);
 
   // The watchlist is the source of truth for what to render; quotes only
   // decorate it. Keeping them separate means a failed price lookup can no
   // longer make a populated list look empty.
-  const [entries, setEntries] = useState<WatchlistEntry[]>([]);
-  const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [indices, setIndices] = useState<IndexQuote[]>([]);
-  const [board, setBoard] = useState<MarketGroup[]>([]);
-  const [trends, setTrends] = useState<Record<string, number[]>>({});
+  // Seeded from the last visit so the page has something to show while the
+  // server wakes, rather than a blank half-minute.
+  const [entries, setEntries] = useState<WatchlistEntry[]>(cached?.entries ?? []);
+  const [quotes, setQuotes] = useState<Quote[]>(cached?.quotes ?? []);
+  const [indices, setIndices] = useState<IndexQuote[]>(cached?.indices ?? []);
+  const [board, setBoard] = useState<MarketGroup[]>(cached?.board ?? []);
+  const [trends, setTrends] = useState<Record<string, number[]>>(cached?.trends ?? {});
+  // Cleared the moment anything fresh lands, so the age note never outlives
+  // the figures it describes.
+  const [servedFrom, setServedFrom] = useState<number | null>(cached?.savedAt ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [waking, setWaking] = useState(false);
@@ -40,7 +50,7 @@ export function DashboardPage() {
   const [points, setPoints] = useState<PricePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [alerts, setAlerts] = useState<PriceAlert[]>(cached?.alerts ?? []);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -56,7 +66,10 @@ export function DashboardPage() {
         api.getMarketBoard(refresh),
       ]).then((results) => {
         const [index, board] = results;
-        if (index.status === "fulfilled") setIndices(index.value);
+        if (index.status === "fulfilled") {
+          setIndices(index.value);
+          setServedFrom(null);
+        }
         if (board.status === "fulfilled") setBoard(board.value);
         return results;
       });
@@ -73,7 +86,10 @@ export function DashboardPage() {
       const [quoteResult] = await Promise.allSettled([
         api.getQuotes(watchlist.map((e) => e.ticker), refresh),
       ]);
-      if (quoteResult.status === "fulfilled") setQuotes(quoteResult.value);
+      if (quoteResult.status === "fulfilled") {
+        setQuotes(quoteResult.value);
+        setServedFrom(null);
+      }
 
       const alertResult = await alertPromise;
       if (alertResult) setAlerts(alertResult.alerts);
@@ -105,6 +121,13 @@ export function DashboardPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Written after each successful load rather than on every render, so the
+  // next visit opens on the last thing this browser actually saw.
+  useEffect(() => {
+    if (loading || entries.length === 0) return;
+    writeSnapshot({ identity, entries, quotes, indices, board, alerts, trends });
+  }, [loading, identity, entries, quotes, indices, board, alerts, trends]);
 
   // Fetch history whenever the selected symbol or range changes.
   useEffect(() => {
@@ -201,6 +224,16 @@ export function DashboardPage() {
       </div>
 
       <TickerSearch onSelect={handleAdd} disabled={loading} />
+
+      {/* Figures from the last visit, shown while the server wakes. Marked
+          with their age, because a stale price presented as live is worse
+          than no price at all. */}
+      {servedFrom !== null && (
+        <p className="stale-banner">
+          <span className="stale-dot" aria-hidden="true" />
+          Showing what you saw {describeAge(servedFrom)} — refreshing now.
+        </p>
+      )}
 
       {/* Only when the page has nothing to show. Each panel already says its
           own piece -- the watchlist counts what it couldn't price, the market

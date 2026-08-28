@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { clearSnapshot } from "../snapshot";
 
 interface Props {
   children: ReactNode;
@@ -25,6 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    // The page is seeded from a snapshot in this browser's storage, which
+    // outlives the reload. If that snapshot is what broke the render, leaving
+    // it in place turns one crash into a permanent one: every reload would
+    // read it back and fail again. Dropping it costs a returning reader one
+    // slow load and makes "reload the page" mean something.
+    clearSnapshot();
+
     // Kept in the console so a crash can still be diagnosed after the fact.
     console.error("Vantage crashed while rendering:", error, info.componentStack);
   }
@@ -37,7 +45,8 @@ export class ErrorBoundary extends Component<Props, State> {
         <h2>Something went wrong on this page</h2>
         <p>
           Vantage hit an unexpected problem while drawing this view. Your watchlist and
-          alerts are stored on the server, so nothing has been lost.
+          alerts are stored on the server, so nothing has been lost. Reloading starts
+          from a clean slate.
         </p>
         <div className="crash-actions">
           <button className="btn" onClick={() => window.location.reload()}>

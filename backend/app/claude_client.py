@@ -3,9 +3,24 @@
 import json
 import re
 
-import anthropic
-
 from app.config import settings
+
+# Only the Fed summariser needs the Anthropic SDK, so it is loaded on first
+# use rather than at startup. Measured in isolation the import costs about a
+# third of a second; most of that is httpx and pydantic, which the app loads
+# anyway, so deferring it saves roughly a tenth of a second off every cold
+# start. Small, but it is a tenth of a second nobody waits for twice.
+anthropic = None
+
+
+def _sdk():
+    global anthropic
+    if anthropic is None:
+        import anthropic as module
+
+        anthropic = module
+    return anthropic
+
 
 MODEL = "claude-haiku-4-5"
 
@@ -37,7 +52,8 @@ def summarize_statement(statement_text: str) -> dict:
     if not settings.anthropic_api_key:
         raise SummarizationError("ANTHROPIC_API_KEY is not set")
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    sdk = _sdk()
+    client = sdk.Anthropic(api_key=settings.anthropic_api_key)
 
     truncated = statement_text[:12000]
 
@@ -48,16 +64,16 @@ def summarize_statement(statement_text: str) -> dict:
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": truncated}],
         )
-    except anthropic.AuthenticationError as e:
+    except sdk.AuthenticationError as e:
         raise SummarizationError(
             "Your Anthropic API key was rejected. Check ANTHROPIC_API_KEY in your "
             "backend settings."
         ) from e
-    except anthropic.RateLimitError as e:
+    except sdk.RateLimitError as e:
         raise SummarizationError(
             "Anthropic rate limit reached. Wait a minute and try again."
         ) from e
-    except anthropic.BadRequestError as e:
+    except sdk.BadRequestError as e:
         message = str(getattr(e, "message", "")) or str(e)
         if "credit balance" in message.lower():
             raise SummarizationError(
@@ -66,9 +82,9 @@ def summarize_statement(statement_text: str) -> dict:
                 "then try again."
             ) from e
         raise SummarizationError(f"Anthropic rejected the request: {message}") from e
-    except anthropic.APIStatusError as e:
+    except sdk.APIStatusError as e:
         raise SummarizationError(f"Anthropic API error: {e.message}") from e
-    except anthropic.APIConnectionError as e:
+    except sdk.APIConnectionError as e:
         raise SummarizationError(
             "Couldn't reach the Anthropic API. Check your network and try again."
         ) from e
