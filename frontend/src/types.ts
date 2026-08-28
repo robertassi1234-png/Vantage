@@ -173,3 +173,19 @@ export interface PeerSuggestions {
   based_on: string[];
   error: string | null;
 }
+
+
+export interface MarketTile {
+  symbol: string;
+  label: string;
+  blurb: string;
+  price: number | null;
+  change: number | null;
+  changePercent: number | null;
+  sparkline: number[];
+}
+
+export interface MarketGroup {
+  group: string;
+  entries: MarketTile[];
+}

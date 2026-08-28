@@ -21,18 +21,23 @@ by email.
    Russell 2000; and an interactive price chart (1M–5Y) for any watchlist name
    or index. Search accepts company names, not just tickers — typing "apple"
    finds AAPL.
-3. **Notes** — write down why you added something. Six months later the
+3. **Under the surface** — a rotating strip of sector and asset-class tiles,
+   each with a sparkline and the day's move. An index says the market rose;
+   this says energy fell while technology carried it. Grouped by how sectors
+   actually behave — growth, defensive, cyclical — so the rotation teaches
+   something rather than just scrolling.
+4. **Notes** — write down why you added something. Six months later the
    numbers still say what a company is doing; only your note says what you
    were thinking.
-4. **Peer suggestions** — Compare proposes competitors for whatever is
+5. **Peer suggestions** — Compare proposes competitors for whatever is
    already in the table, ranked by how many of your holdings list each one.
    A multiple only means something next to the companies it competes with.
-5. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
+6. **Stock comparison** — add tickers to a watchlist, see PE ratio, EV/EBITDA,
    market cap, revenue/EPS growth, margins, debt/equity, ROE, dividend yield,
    and more in a sortable table. Data from [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs).
    Fundamentals are cached for 24h (configurable) so you don't burn API calls
    on every page load.
-6. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
+7. **Fed policy tracker** — pulls recent FOMC statements from federalreserve.gov
    (public RSS feed, no API key needed), summarizes tone (hawkish/dovish/neutral)
    and key takeaways using Claude Haiku, and shows a timeline. Refresh is
    **on-demand** (a button) rather than a background daily job — simpler to

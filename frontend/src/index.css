@@ -1975,3 +1975,213 @@ td.band-high {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* --- sparkline refinements --------------------------------------------- */
+
+/* A faint wash under the line: enough weight to read the shape at 34px,
+   not enough to compete with the value above it. */
+.sparkline-area {
+  fill: var(--tone, var(--muted-2));
+  opacity: 0.1;
+}
+
+.sparkline-dot {
+  stroke: var(--surface);
+}
+
+/* --- market board ------------------------------------------------------ */
+
+.market-board {
+  margin-bottom: 1.5rem;
+}
+
+.board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.board-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.2rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.board-tab {
+  padding: 0.35rem 0.85rem;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.board-tab:hover {
+  color: var(--text);
+}
+
+.board-tab.active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.board-hint {
+  color: var(--muted-2);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.board-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.75rem;
+  /* Keyed on the group, so a change of page replays this rather than the
+     tiles silently swapping their numbers. */
+  animation: board-in 0.35s ease both;
+}
+
+@keyframes board-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-grid {
+    animation: none;
+  }
+}
+
+.board-tile {
+  display: grid;
+  gap: 0.25rem;
+  width: 100%;
+  padding: 0.9rem 1rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.board-tile:hover {
+  border-color: var(--muted-2);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.board-tile.active {
+  border-color: var(--accent);
+}
+
+.tile-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tile-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-symbol {
+  color: var(--muted-2);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
+/* Proportional figures, not tabular: at display size tabular-nums gives every
+   digit the width of a zero and the number reads loose. */
+.tile-value {
+  font-size: 1.35rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.tile-delta {
+  color: var(--tone, var(--muted));
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-spark {
+  display: block;
+  margin: 0.35rem 0 0.1rem;
+}
+
+.tile-blurb {
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.board-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.board-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.2s ease, width 0.2s ease;
+}
+
+.board-dot:hover {
+  background: var(--muted-2);
+}
+
+.board-dot.active {
+  width: 18px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+@media (max-width: 620px) {
+  .board-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .board-tabs {
+    overflow-x: auto;
+  }
+
+  .board-hint {
+    display: none;
+  }
+}

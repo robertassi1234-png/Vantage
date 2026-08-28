@@ -28,6 +28,7 @@ function stubApi(over: Partial<typeof api> = {}) {
   vi.spyOn(api, "getListEntries").mockResolvedValue([]);
   vi.spyOn(api, "setNote").mockResolvedValue([]);
   vi.spyOn(api, "getPeers").mockResolvedValue({ suggestions: [], based_on: [], error: null });
+  vi.spyOn(api, "getMarketBoard").mockResolvedValue([]);
   vi.spyOn(api, "getIndices").mockResolvedValue([]);
   vi.spyOn(api, "getQuotes").mockResolvedValue([]);
   vi.spyOn(api, "checkAlerts").mockResolvedValue({

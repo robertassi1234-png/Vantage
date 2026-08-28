@@ -7,10 +7,28 @@
     <meta name="description" content="Compare stock fundamentals side-by-side and track Fed policy sentiment." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!--
+      Loaded without blocking the render. As a plain stylesheet this sits in
+      the critical path: if fonts.googleapis.com is slow, or blocked on the
+      reader's network, the page stays entirely blank until it times out --
+      seconds of nothing, for a typeface. Applying it to `print` first means
+      the browser fetches it at low priority and paints immediately; the
+      onload flips it to `all` once it has arrived. The CSS names real
+      fallbacks and the URL already asks for display=swap, so the wait is a
+      different typeface rather than invisible text.
+    -->
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap"
+        rel="stylesheet"
+      />
+    </noscript>
     <title>Vantage</title>
   </head>
   <body>

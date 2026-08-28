@@ -17,6 +17,7 @@ import type {
   SignInLinkResult,
   SignInResult,
   PeerSuggestions,
+  MarketGroup,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -209,6 +210,9 @@ export const api = {
 
   getFundamentals: (refresh = false) =>
     request<FundamentalsRow[]>(`/api/fundamentals?refresh=${refresh}`),
+
+  getMarketBoard: (refresh = false) =>
+    request<MarketGroup[]>(`/api/market/board?refresh=${refresh}`),
 
   getIndices: (refresh = false) =>
     request<IndexQuote[]>(`/api/market/indices?refresh=${refresh}`),

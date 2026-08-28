@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useCurrentAccount } from "../AccountContext";
 import { ApiError, api } from "../api";
+import { MarketBoard } from "../components/MarketBoard";
 import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
 import { TickerSearch } from "../components/TickerSearch";
@@ -13,6 +14,7 @@ import {
   type PriceAlert,
   type PricePoint,
   type Quote,
+  type MarketGroup,
   type RangeKey,
   type WatchlistEntry,
 } from "../types";
@@ -26,6 +28,7 @@ export function DashboardPage() {
   const [entries, setEntries] = useState<WatchlistEntry[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [indices, setIndices] = useState<IndexQuote[]>([]);
+  const [board, setBoard] = useState<MarketGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [waking, setWaking] = useState(false);
@@ -42,29 +45,39 @@ export function DashboardPage() {
     setLoading(true);
     setError(null);
     try {
+      // Only the watchlist quotes depend on anything, so everything else is
+      // started at once rather than after it. Waiting for the list first cost
+      // a whole round trip on a page that already waits on a sleeping server.
+      // Painted the moment it lands rather than at a later await, so a slow
+      // market call cannot hold back the watchlist or vice versa.
+      const marketPromise = Promise.allSettled([
+        api.getIndices(refresh),
+        api.getMarketBoard(refresh),
+      ]).then((results) => {
+        const [index, board] = results;
+        if (index.status === "fulfilled") setIndices(index.value);
+        if (board.status === "fulfilled") setBoard(board.value);
+        return results;
+      });
+      // Alerts are evaluated here because nothing runs while the app is
+      // closed on free hosting. See NIGHT-LOG for what background delivery
+      // would need.
+      const alertPromise = api.checkAlerts().catch(() => null);
+
       // Entries rather than bare tickers: the note lives alongside the symbol,
       // and one request beats two.
       const watchlist = await api.getListEntries("watch");
       setEntries(watchlist);
-      const symbols = watchlist.map((e) => e.ticker);
-      // Indices and quotes are independent; one failing shouldn't blank the other.
-      const [indexResult, quoteResult] = await Promise.allSettled([
-        api.getIndices(refresh),
-        api.getQuotes(symbols, refresh),
-      ]);
 
-      if (indexResult.status === "fulfilled") setIndices(indexResult.value);
+      const [quoteResult] = await Promise.allSettled([
+        api.getQuotes(watchlist.map((e) => e.ticker), refresh),
+      ]);
       if (quoteResult.status === "fulfilled") setQuotes(quoteResult.value);
 
-      // Alerts are evaluated here because nothing runs while the app is
-      // closed on free hosting. See NIGHT-LOG for what background delivery
-      // would need.
-      try {
-        setAlerts((await api.checkAlerts()).alerts);
-      } catch {
-        // An alert check failing must not blank the dashboard.
-      }
+      const alertResult = await alertPromise;
+      if (alertResult) setAlerts(alertResult.alerts);
 
+      const [indexResult] = await marketPromise;
       const failure = [indexResult, quoteResult].find((r) => r.status === "rejected");
       if (failure && failure.status === "rejected") {
         const reason = failure.reason;
@@ -211,6 +224,18 @@ export function DashboardPage() {
         <div className="empty-state">
           <p>Index data unavailable right now.</p>
         </div>
+      )}
+
+      {board.length > 0 && (
+        <>
+          <h3 className="section-heading">
+            Under the surface
+            <span className="section-note">
+              How each part of the market is doing — click any for its chart
+            </span>
+          </h3>
+          <MarketBoard groups={board} onSelect={showChart} activeSymbol={chartSymbol} />
+        </>
       )}
 
       <h3 className="section-heading">

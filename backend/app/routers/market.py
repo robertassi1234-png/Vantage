@@ -16,6 +16,51 @@ INDICES = [
     {"symbol": "^RUT", "label": "Russell 2000", "blurb": "2,000 smaller US companies"},
 ]
 
+# What the parts of the market are doing, which the four headline indices
+# cannot show: an index says the market rose, this says energy fell while
+# technology carried it.
+#
+# Deliberately additive -- no overlap with the indices row above, because the
+# same thing priced two ways (an index level and its ETF) reads as a
+# contradiction to anyone new. Grouped by how these sectors actually behave,
+# so the rotation teaches something rather than just scrolling: growth leads
+# in a rally, defensives hold up in a fall, cyclicals track the economy.
+MARKET_BOARD = [
+    {
+        "group": "Growth",
+        "entries": [
+            {"symbol": "XLK", "label": "Technology", "blurb": "Software, chips and hardware"},
+            {"symbol": "XLY", "label": "Consumer discretionary", "blurb": "What people buy when times are good"},
+            {"symbol": "XLC", "label": "Communications", "blurb": "Media, telecom and social"},
+        ],
+    },
+    {
+        "group": "Defensive",
+        "entries": [
+            {"symbol": "XLV", "label": "Healthcare", "blurb": "Pharma, insurers and devices"},
+            {"symbol": "XLP", "label": "Consumer staples", "blurb": "Food and household basics"},
+            {"symbol": "XLU", "label": "Utilities", "blurb": "Power and water — steady demand"},
+        ],
+    },
+    {
+        "group": "Cyclical",
+        "entries": [
+            {"symbol": "XLF", "label": "Financials", "blurb": "Banks, brokers and insurers"},
+            {"symbol": "XLI", "label": "Industrials", "blurb": "Machinery, transport and defence"},
+            {"symbol": "XLE", "label": "Energy", "blurb": "Oil, gas and drilling"},
+        ],
+    },
+    {
+        "group": "Global & other",
+        "entries": [
+            {"symbol": "VEA", "label": "Developed markets", "blurb": "Europe, Japan and Australia"},
+            {"symbol": "VWO", "label": "Emerging markets", "blurb": "China, India, Brazil and more"},
+            {"symbol": "AGG", "label": "US bonds", "blurb": "Investment-grade debt"},
+            {"symbol": "GLD", "label": "Gold", "blurb": "Tracks the gold price"},
+        ],
+    },
+]
+
 # Quotes move constantly but the free tier is 250 calls/day, so serve a recent
 # snapshot rather than refetching on every page load. Daily closes only change
 # once a day, so history can be cached far longer.
@@ -48,16 +93,12 @@ def provider_status() -> dict:
     }
 
 
-@router.get("/indices")
-async def get_indices(refresh: bool = False) -> list[dict]:
-    """Quote plus a short sparkline series for each headline index."""
-    cache_key = "indices"
+async def _priced_tiles(cache_key: str, entries: list[dict], refresh: bool) -> list[dict]:
+    """Quote plus a short sparkline for each entry, cached as one payload."""
     if not refresh:
         cached = db.get_market_cache(cache_key, QUOTE_TTL_SECONDS)
         if cached is not None:
             return cached
-
-    symbols = [i["symbol"] for i in INDICES]
 
     def stale_or_fail(detail: str):
         """Old prices beat blank tiles; a blank cache is worth an honest error."""
@@ -67,7 +108,7 @@ async def get_indices(refresh: bool = False) -> list[dict]:
         raise HTTPException(status_code=502, detail=detail)
 
     try:
-        quotes = await fetch_quotes(symbols)
+        quotes = await fetch_quotes([e["symbol"] for e in entries])
     except FMPError as e:
         return stale_or_fail(str(e))
 
@@ -75,17 +116,17 @@ async def get_indices(refresh: bool = False) -> list[dict]:
     # outage that kills every symbol arrives here as an empty list. Caching that
     # would blank the dashboard for a full TTL and overwrite good prices.
     if not quotes:
-        return stale_or_fail("Couldn't fetch index prices right now.")
+        return stale_or_fail("Couldn't fetch market prices right now.")
 
     by_symbol = {q["symbol"]: q for q in quotes}
-    sparklines = await asyncio.gather(*(_sparkline(i["symbol"]) for i in INDICES))
+    sparklines = await asyncio.gather(*(_sparkline(e["symbol"]) for e in entries))
 
     results = []
-    for index, sparkline in zip(INDICES, sparklines):
-        quote = by_symbol.get(index["symbol"], {})
+    for entry, sparkline in zip(entries, sparklines):
+        quote = by_symbol.get(entry["symbol"], {})
         results.append(
             {
-                **index,
+                **entry,
                 "price": quote.get("price"),
                 "change": quote.get("change"),
                 "changePercent": quote.get("changePercent"),
@@ -95,6 +136,30 @@ async def get_indices(refresh: bool = False) -> list[dict]:
 
     db.set_market_cache(cache_key, results)
     return results
+
+
+@router.get("/indices")
+async def get_indices(refresh: bool = False) -> list[dict]:
+    """Quote plus a short sparkline series for each headline index."""
+    return await _priced_tiles("indices", INDICES, refresh)
+
+
+@router.get("/board")
+async def get_board(refresh: bool = False) -> list[dict]:
+    """The wider market, grouped into themes the strip rotates through."""
+    entries = [e for group in MARKET_BOARD for e in group["entries"]]
+    tiles = await _priced_tiles("board", entries, refresh)
+    by_symbol = {t["symbol"]: t for t in tiles}
+
+    return [
+        {
+            "group": group["group"],
+            "entries": [
+                by_symbol[e["symbol"]] for e in group["entries"] if e["symbol"] in by_symbol
+            ],
+        }
+        for group in MARKET_BOARD
+    ]
 
 
 async def _sparkline(symbol: str) -> list[float]:
