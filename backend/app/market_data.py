@@ -76,10 +76,36 @@ def _order() -> list[str]:
     return valid or ["fmp"]
 
 
+def _summarise(failures: list[tuple[str, str]], benched: list[str]) -> str:
+    """One sentence for the reader when every provider has failed.
+
+    The last provider to fail is the least informative one -- it is the
+    fallback of a fallback, reached only because everything better was already
+    gone. Reporting it produced "Stooq returned 404" for what was really an
+    exhausted primary. So the first real failure leads, since that is the
+    provider that was supposed to serve the request.
+    """
+    if failures and all(provider_health.looks_rate_limited(m) for _, m in failures):
+        return (
+            "Market data is rate limited across every provider right now. "
+            "They recover on their own -- try again in a few minutes."
+        )
+
+    if benched and not failures:
+        return (
+            "Market data is rate limited across every provider right now. "
+            "They recover on their own -- try again in a few minutes."
+        )
+
+    if failures:
+        return failures[0][1]
+    return "Market data is unavailable right now."
+
+
 async def _first_success(operation: str, call, *args, **kwargs):
-    """Try each provider in turn; raise the last error if all fail."""
-    last_error: Exception | None = None
-    skipped: list[str] = []
+    """Try each provider in turn; summarise if all of them fail."""
+    failures: list[tuple[str, str]] = []
+    benched: list[str] = []
     attempted = 0
 
     for name in _order():
@@ -88,10 +114,16 @@ async def _first_success(operation: str, call, *args, **kwargs):
         if func is None:
             continue
 
+        # A provider with no key is not a fallback, it is a wasted round trip
+        # -- and its "key is not set" complaint would otherwise surface to the
+        # reader as the reason their data is missing.
+        if not is_configured(name):
+            continue
+
         # A provider that has just said it is out of quota will say so again.
         # Skipping it saves a round trip per lookup rather than per session.
         if not provider_health.is_available(name):
-            skipped.append(name)
+            benched.append(name)
             continue
 
         attempted += 1
@@ -101,7 +133,7 @@ async def _first_success(operation: str, call, *args, **kwargs):
             # A provider being down is expected; note it and move on.
             log.warning("%s: provider %s failed: %s", operation, name, e)
             provider_health.record_failure(name, str(e))
-            last_error = e
+            failures.append((name, str(e)))
             continue
 
         # An empty result is a miss, not a failure -- but if a later provider
@@ -109,20 +141,16 @@ async def _first_success(operation: str, call, *args, **kwargs):
         if result:
             provider_health.record_success(name)
             return result
-        last_error = last_error or None
 
-    if last_error is not None:
-        raise FMPError(str(last_error))
+    if failures:
+        raise FMPError(_summarise(failures, benched))
 
     # Nothing ran at all, so there is no error to report and no data either.
     # Say which, rather than returning an empty result that reads as "no such
     # ticker". Only when every provider was benched: if one actually ran and
     # simply had nothing, that is a genuine empty result.
-    if skipped and attempted == 0:
-        raise FMPError(
-            "Every data provider is currently rate limited: "
-            f"{', '.join(skipped)}. They recover on their own -- try again shortly."
-        )
+    if benched and attempted == 0:
+        raise FMPError(_summarise(failures, benched))
     return []
 
 
@@ -160,13 +188,19 @@ def _fundamentals_order() -> list[str]:
 
 async def fetch_fundamentals(ticker: str) -> dict:
     """Fundamentals for one ticker, from whichever provider still answers."""
-    last_error: Exception | None = None
-    skipped: list[str] = []
+    failures: list[tuple[str, str]] = []
+    benched: list[str] = []
     attempted = 0
 
     for name in _fundamentals_order():
+        # An unkeyed provider cannot serve anything, and saying so in the
+        # table -- "ALPHA_VANTAGE_API_KEY is not set" against a ticker -- tells
+        # the reader nothing about their stock.
+        if not is_configured(name):
+            continue
+
         if not provider_health.is_available(name):
-            skipped.append(name)
+            benched.append(name)
             continue
 
         attempted += 1
@@ -175,18 +209,13 @@ async def fetch_fundamentals(ticker: str) -> dict:
         except PROVIDER_ERRORS as e:
             log.warning("fundamentals: provider %s failed: %s", name, e)
             provider_health.record_failure(name, str(e))
-            last_error = e
+            failures.append((name, str(e)))
             continue
 
         if result:
             provider_health.record_success(name)
             return result
 
-    if last_error is not None:
-        raise FMPError(str(last_error))
-    if skipped and attempted == 0:
-        raise FMPError(
-            "Every fundamentals provider is currently rate limited: "
-            f"{', '.join(skipped)}. Try again shortly."
-        )
+    if failures or benched:
+        raise FMPError(_summarise(failures, benched))
     raise FMPError(f"No data found for ticker '{ticker}'")

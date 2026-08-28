@@ -9,8 +9,17 @@ import pytest
 
 from fastapi.testclient import TestClient
 
-from app import fmp_client, market_data, provider_health, yahoo_client
+from app import (
+    alphavantage_client,
+    fmp_client,
+    market_data,
+    provider_health,
+    stooq_client,
+    yahoo_client,
+)
+from app.alphavantage_client import AlphaVantageError
 from app.main import app
+from app.stooq_client import StooqError
 from app.config import settings
 from app.fmp_client import FMPError
 from app.yahoo_client import YahooError
@@ -181,7 +190,9 @@ class TestTheChainUsesIt:
         with pytest.raises(FMPError):
             await market_data.fetch_quotes(["AAPL"])
 
-        with pytest.raises(FMPError, match="Every data provider is currently rate limited"):
+        # The message must not name an internal provider or a config variable:
+        # "Stooq returned 404" for an exhausted primary told nobody anything.
+        with pytest.raises(FMPError, match="rate limited across every provider"):
             await market_data.fetch_quotes(["MSFT"])
 
     async def test_a_genuine_empty_result_is_still_empty(self, monkeypatch, order):
@@ -298,3 +309,168 @@ class TestConfiguredDetection:
 
         monkeypatch.setattr(settings, "finnhub_api_key", "fh_test")
         assert market_data.is_configured("finnhub") is True
+
+
+class TestErrorsTheReaderSees:
+    """Both of these reached the screen and told the reader nothing.
+
+    A comparison row said "CRWV: ALPHA_VANTAGE_API_KEY is not set", which is a
+    server setting, not a fact about that company. The dashboard said "Stooq
+    returned 404" when the real story was that the primary provider was spent
+    and Stooq is only ever the third choice.
+    """
+
+    async def test_an_unkeyed_provider_is_never_called(self, monkeypatch, order):
+        monkeypatch.setattr(settings, "alpha_vantage_api_key", "")
+        called = []
+
+        async def should_not_run(ticker):
+            called.append(ticker)
+            raise AlphaVantageError("ALPHA_VANTAGE_API_KEY is not set")
+
+        async def fmp_no_data(ticker):
+            raise FMPError("No data found for ticker 'CRWV'")
+
+        monkeypatch.setattr(alphavantage_client, "fetch_fundamentals", should_not_run)
+        monkeypatch.setattr(fmp_client, "fetch_fundamentals", fmp_no_data)
+        monkeypatch.setattr(settings, "finnhub_api_key", "")
+
+        with pytest.raises(FMPError):
+            await market_data.fetch_fundamentals("CRWV")
+
+        assert called == []
+
+    async def test_a_config_variable_never_reaches_the_reader(self, monkeypatch, order):
+        monkeypatch.setattr(settings, "alpha_vantage_api_key", "")
+        monkeypatch.setattr(settings, "finnhub_api_key", "")
+
+        async def fmp_no_data(ticker):
+            raise FMPError("No data found for ticker 'CRWV'")
+
+        monkeypatch.setattr(fmp_client, "fetch_fundamentals", fmp_no_data)
+
+        with pytest.raises(FMPError) as excinfo:
+            await market_data.fetch_fundamentals("CRWV")
+
+        assert "API_KEY" not in str(excinfo.value)
+        assert "CRWV" in str(excinfo.value)
+
+    async def test_the_primary_failure_leads_not_the_last_fallback(
+        self, monkeypatch, order
+    ):
+        """Stooq is the third choice; its 404 is not the story."""
+        order("yahoo,fmp,stooq")
+
+        async def yahoo_down(symbols):
+            raise YahooError("Yahoo Finance has no data for 'ZZZZ'")
+
+        async def fmp_down(symbols):
+            raise FMPError("No data found for ticker 'ZZZZ'")
+
+        async def stooq_404(symbols):
+            raise StooqError("Stooq returned 404")
+
+        monkeypatch.setattr(yahoo_client, "fetch_quotes", yahoo_down)
+        monkeypatch.setattr(fmp_client, "fetch_quotes", fmp_down)
+        monkeypatch.setattr(stooq_client, "fetch_quotes", stooq_404)
+
+        with pytest.raises(FMPError) as excinfo:
+            await market_data.fetch_quotes(["ZZZZ"])
+
+        assert "404" not in str(excinfo.value)
+        assert "Yahoo" in str(excinfo.value)
+
+    async def test_all_rate_limited_reads_as_one_plain_sentence(
+        self, monkeypatch, order
+    ):
+        order("yahoo,fmp,stooq")
+        for provider, error in (
+            (yahoo_client, YahooError("Yahoo Finance is rate limiting this address")),
+            (fmp_client, FMPError("FMP API rate limit reached (free tier: 250 calls/day)")),
+            (stooq_client, StooqError("Stooq daily request limit exceeded")),
+        ):
+            async def _fail(symbols, _e=error):
+                raise _e
+            monkeypatch.setattr(provider, "fetch_quotes", _fail)
+
+        with pytest.raises(FMPError) as excinfo:
+            await market_data.fetch_quotes(["AAPL"])
+
+        message = str(excinfo.value)
+        assert "rate limited across every provider" in message
+        for internal in ("Stooq", "FMP", "Yahoo", "404"):
+            assert internal not in message
+
+    async def test_a_working_provider_is_unaffected(self, monkeypatch, order):
+        """None of this may change the happy path."""
+        order("yahoo,fmp,stooq")
+
+        async def yahoo_up(symbols):
+            return [{"symbol": "AAPL", "price": 268.4}]
+
+        monkeypatch.setattr(yahoo_client, "fetch_quotes", yahoo_up)
+        assert await market_data.fetch_quotes(["AAPL"]) == [{"symbol": "AAPL", "price": 268.4}]
+
+
+class TestPersistentlyBrokenProviders:
+    """A provider blocked from this host never reports a limit -- it just
+    fails, every time. Stooq answered 404 to every request from the deployed
+    server, costing a round trip on each lookup forever."""
+
+    def test_one_failure_does_not_bench(self):
+        provider_health.record_failure("stooq", "Stooq returned 404")
+        assert provider_health.is_available("stooq") is True
+
+    def test_two_failures_still_do_not(self):
+        for _ in range(2):
+            provider_health.record_failure("stooq", "Stooq returned 404")
+        assert provider_health.is_available("stooq") is True
+
+    def test_failing_every_time_does(self):
+        for _ in range(provider_health.CONSECUTIVE_FAILURES_BEFORE_BENCH):
+            provider_health.record_failure("stooq", "Stooq returned 404")
+        assert provider_health.is_available("stooq") is False
+
+    def test_the_reason_says_it_is_failing_not_that_it_is_throttled(self):
+        for _ in range(provider_health.CONSECUTIVE_FAILURES_BEFORE_BENCH):
+            provider_health.record_failure("stooq", "Stooq returned 404")
+        assert "failing repeatedly" in provider_health.state("stooq").reason
+
+    def test_an_occasional_failure_never_accumulates_into_a_bench(self):
+        """Interleaved successes mean the provider is working, not broken."""
+        for _ in range(10):
+            provider_health.record_failure("stooq", "Stooq returned 404")
+            provider_health.record_success("stooq")
+        assert provider_health.is_available("stooq") is True
+
+    def test_it_is_retried_after_the_bench(self, monkeypatch):
+        for _ in range(provider_health.CONSECUTIVE_FAILURES_BEFORE_BENCH):
+            provider_health.record_failure("stooq", "Stooq returned 404")
+
+        later = provider_health._now() + provider_health.BROKEN_COOLDOWN_SECONDS + 1
+        monkeypatch.setattr(provider_health, "_now", lambda: later)
+        assert provider_health.is_available("stooq") is True
+
+    async def test_a_broken_provider_stops_costing_a_round_trip(
+        self, monkeypatch, order
+    ):
+        order("yahoo,stooq")
+        calls = []
+
+        async def yahoo_miss(symbols):
+            return []
+
+        async def stooq_broken(symbols):
+            calls.append(symbols)
+            raise StooqError("Stooq returned 404")
+
+        monkeypatch.setattr(yahoo_client, "fetch_quotes", yahoo_miss)
+        monkeypatch.setattr(stooq_client, "fetch_quotes", stooq_broken)
+
+        for _ in range(10):
+            try:
+                await market_data.fetch_quotes(["AAPL"])
+            except FMPError:
+                pass
+
+        assert len(calls) == provider_health.CONSECUTIVE_FAILURES_BEFORE_BENCH

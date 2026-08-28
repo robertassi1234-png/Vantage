@@ -23,6 +23,12 @@ from dataclasses import dataclass
 DAILY_COOLDOWN_SECONDS = 60 * 60
 # A per-minute cap recovers on its own almost immediately.
 BURST_COOLDOWN_SECONDS = 90
+# A provider failing every single call is broken for us -- blocked from this
+# host, an endpoint that moved -- not merely unlucky. Benching it briefly
+# stops it costing a round trip on every lookup, while still retrying often
+# enough to notice when it comes back.
+BROKEN_COOLDOWN_SECONDS = 10 * 60
+CONSECUTIVE_FAILURES_BEFORE_BENCH = 3
 
 DAILY_HINTS = ("per day", "daily", "/day", "day)", "quota")
 # Providers word this differently: "rate limit reached", "too many requests",
@@ -47,6 +53,7 @@ class ProviderState:
     reason: str = ""
     failures: int = 0
     successes: int = 0
+    consecutive_failures: int = 0
     last_error: str = ""
 
 
@@ -86,21 +93,31 @@ def is_available(name: str) -> bool:
 def record_success(name: str) -> None:
     entry = state(name)
     entry.successes += 1
+    entry.consecutive_failures = 0
     # A provider that answers is back, whatever it said last time.
     entry.cooldown_until = 0.0
     entry.reason = ""
 
 
 def record_failure(name: str, message: str) -> None:
-    """Note a failure, and bench the provider if it was a quota refusal."""
+    """Note a failure, and bench the provider if it looks persistent.
+
+    Two ways to earn a bench: saying outright that you are out of quota, or
+    simply failing every time. The second catches a provider that is blocked
+    from this host or whose endpoint has moved -- it never reports a limit, it
+    just never works, and without this it would be retried forever.
+    """
     entry = state(name)
     entry.failures += 1
+    entry.consecutive_failures += 1
     entry.last_error = message
 
     if looks_rate_limited(message):
-        seconds = cooldown_for(message)
-        entry.cooldown_until = _now() + seconds
+        entry.cooldown_until = _now() + cooldown_for(message)
         entry.reason = message
+    elif entry.consecutive_failures >= CONSECUTIVE_FAILURES_BEFORE_BENCH:
+        entry.cooldown_until = _now() + BROKEN_COOLDOWN_SECONDS
+        entry.reason = f"failing repeatedly: {message}"
 
 
 def seconds_remaining(name: str) -> int:
@@ -117,6 +134,7 @@ def snapshot(names: list[str]) -> list[dict]:
             "reason": state(name).reason or None,
             "successes": state(name).successes,
             "failures": state(name).failures,
+            "consecutive_failures": state(name).consecutive_failures,
             "last_error": state(name).last_error or None,
         }
         for name in names
