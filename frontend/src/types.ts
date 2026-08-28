@@ -40,6 +40,35 @@ export interface WatchlistEntry {
   note: string | null;
 }
 
+/**
+ * One purchase or sale. Negative shares are a sale, with costPerShare
+ * carrying the price sold at, so a position's history stays a single ordered
+ * list rather than two that have to be interleaved to compute anything.
+ */
+export interface Lot {
+  id: string;
+  ticker: string;
+  shares: number;
+  costPerShare: number;
+  tradeDate: string;
+  note: string | null;
+  created_at: string;
+}
+
+/** A share split already applied to a ticker's lots. Kept so it can be undone. */
+export interface SplitAdjustment {
+  id: string;
+  ticker: string;
+  /** New shares per old one: 4-for-1 is 4, a reverse 1-for-10 is 0.1. */
+  ratio: number;
+  applied_at: string;
+}
+
+export interface PositionsResponse {
+  lots: Lot[];
+  splits: SplitAdjustment[];
+}
+
 export type AlertDirection = "above" | "below";
 
 export interface PriceAlert {
@@ -66,11 +95,20 @@ export interface WorkspaceExport {
   exported_at: string;
   lists: Record<string, { ticker: string; added_at?: string | null; note?: string | null }[]>;
   alerts: { ticker: string; direction: string; threshold: number; note?: string | null }[];
+  /** Added in v2. Absent in a file written before positions existed. */
+  lots?: {
+    ticker: string;
+    shares: number;
+    costPerShare: number;
+    tradeDate: string;
+    note?: string | null;
+  }[];
 }
 
 export interface ImportResult {
   added: Record<string, number>;
   alerts_added: number;
+  lots_added?: number;
   skipped: string[];
 }
 

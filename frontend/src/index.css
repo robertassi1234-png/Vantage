@@ -2717,3 +2717,337 @@ td.band-high {
     animation: none;
   }
 }
+
+/* ---------- Positions ---------- */
+
+/* The portfolio total sits above the list it comes from, on the page ground
+   rather than in a card: it is a summary of what follows, not another panel
+   competing with it. */
+.portfolio-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  align-items: flex-start;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: var(--space-block);
+  background: var(--surface-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.portfolio-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.portfolio-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.portfolio-value {
+  /* The loudest number on the page, because it answers the first question. */
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  color: var(--tone, var(--text));
+}
+
+.portfolio-arrow {
+  font-size: 0.8em;
+  margin-right: 0.15em;
+}
+
+.portfolio-sub {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--tone, var(--muted));
+}
+
+.portfolio-caveat {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* A hairline on the row's edge, not a badge or a separate section: the point
+   is to see owned and watched side by side without the eye being pulled. */
+.watch-row.owned {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.watch-position {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.position-value {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.position-return {
+  font-size: 0.78rem;
+  color: var(--tone, var(--muted));
+}
+
+.expand-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--muted-2);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.expand-btn:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.expand-btn.open {
+  transform: rotate(180deg);
+  color: var(--accent);
+}
+
+.watch-row.expanded {
+  background: var(--surface-2);
+}
+
+.position-detail {
+  padding: 0.25rem 1.1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-block);
+}
+
+.position-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.9rem 1.5rem;
+  margin: 0;
+}
+
+.position-stat dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.position-stat dd {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--tone, var(--text));
+}
+
+.position-stat-sub {
+  margin-left: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--tone, var(--muted));
+}
+
+.position-realised {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.position-realised strong {
+  color: var(--tone, var(--text));
+  font-family: var(--font-mono);
+}
+
+/* A tinted panel rather than a red border: this is something to correct, not
+   a failure. */
+.position-warning {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--band-high-bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.lot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.lot-table th {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  border-bottom: 1px solid var(--divider);
+}
+
+.lot-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--divider);
+}
+
+.lot-table tr:last-child td {
+  border-bottom: none;
+}
+
+.lot-table .num {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.lot-kind {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+}
+
+.lot-buy {
+  background: var(--dovish-soft);
+  color: var(--dovish);
+}
+
+.lot-sell {
+  background: var(--hawkish-soft);
+  color: var(--hawkish);
+}
+
+.lot-form,
+.split-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+}
+
+.lot-side {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 2px;
+  box-shadow: inset 0 0 0 1px var(--divider);
+}
+
+.side-btn {
+  border: none;
+  background: none;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.side-btn.active {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.lot-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.lot-field span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+
+.lot-field input {
+  width: 8.5rem;
+  padding: 0.4rem 0.55rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.lot-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.lot-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--hawkish);
+}
+
+.lot-hint,
+.split-list {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.split-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.split-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.split-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+@media (max-width: 720px) {
+  .portfolio-strip {
+    gap: 1.25rem 2rem;
+  }
+
+  .portfolio-value {
+    font-size: 1.25rem;
+  }
+
+  .lot-field input {
+    width: 6.5rem;
+  }
+}

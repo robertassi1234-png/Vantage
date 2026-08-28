@@ -38,6 +38,7 @@ function stubApi(over: Partial<typeof api> = {}) {
     error: null,
   });
   vi.spyOn(api, "getHistory").mockResolvedValue({ symbol: "X", range: "1Y", points: [] });
+  vi.spyOn(api, "getPositions").mockResolvedValue({ lots: [], splits: [] });
   vi.spyOn(api, "addToList").mockResolvedValue([]);
   vi.spyOn(api, "removeFromList").mockResolvedValue([]);
   vi.spyOn(api, "searchSymbols").mockResolvedValue([
@@ -206,5 +207,59 @@ describe("DashboardPage notes", () => {
 
     render(<DashboardPage />);
     expect(await screen.findByText("still here")).toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage positions", () => {
+  const lot = (ticker: string, shares: number, costPerShare: number) => ({
+    id: `${ticker}-1`,
+    ticker,
+    shares,
+    costPerShare,
+    tradeDate: "2025-01-01",
+    note: null,
+    created_at: "2025-01-01",
+  });
+
+  it("values the watchlist against the prices already on screen", async () => {
+    stubApi({
+      getListEntries: async () => entries("AAPL"),
+      getQuotes: async () => [quote("AAPL", 150)],
+      getPositions: async () => ({ lots: [lot("AAPL", 10, 100)], splits: [] }),
+    });
+    render(<DashboardPage />);
+
+    // One source of prices for both the row and the portfolio total, so a
+    // refresh can never move one without the other.
+    // Twice over: once as the portfolio total, once on the row itself.
+    expect(await screen.findAllByText("$1,500.00")).toHaveLength(2);
+    expect(screen.getByText("Portfolio value")).toBeInTheDocument();
+  });
+
+  it("stays a plain watchlist when no cost basis has been entered", async () => {
+    stubApi({
+      getListEntries: async () => entries("AAPL"),
+      getQuotes: async () => [quote("AAPL", 150)],
+    });
+    render(<DashboardPage />);
+
+    await screen.findByText("AAPL");
+    expect(screen.queryByText("Portfolio value")).not.toBeInTheDocument();
+  });
+
+  it("still renders the watchlist when the cost basis request fails", async () => {
+    // Positions are an addition to a page that worked without them; losing
+    // them must not take the prices down too.
+    stubApi({
+      getListEntries: async () => entries("AAPL"),
+      getQuotes: async () => [quote("AAPL", 150)],
+      getPositions: async () => {
+        throw new ApiError("positions are down");
+      },
+    });
+    render(<DashboardPage />);
+
+    expect(await screen.findByText("$150.00")).toBeInTheDocument();
+    expect(screen.queryByText("Portfolio value")).not.toBeInTheDocument();
   });
 });

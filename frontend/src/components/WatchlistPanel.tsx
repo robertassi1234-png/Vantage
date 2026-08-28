@@ -1,6 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkline } from "./Sparkline";
-import type { Quote, WatchlistEntry } from "../types";
+import { PositionDetail } from "./PositionDetail";
+import { money, signedPercent } from "./PortfolioSummary";
+import type { Portfolio } from "../positions";
+import { splitsFor } from "../positions";
+import type { Quote, SplitAdjustment, WatchlistEntry } from "../types";
+
+export interface PositionActions {
+  onAddLot: (
+    ticker: string,
+    lot: { shares: number; costPerShare: number; tradeDate: string },
+  ) => Promise<void>;
+  onDeleteLot: (id: string) => Promise<void>;
+  onApplySplit: (ticker: string, ratio: number) => Promise<void>;
+  onUndoSplit: (id: string) => Promise<void>;
+}
 
 interface Props {
   /** The watchlist itself. Rows come from here, never from the quotes. */
@@ -8,6 +22,10 @@ interface Props {
   quotes: Quote[];
   /** Recent closes per symbol, for the row trend line. Optional and best-effort. */
   trends?: Record<string, number[]>;
+  /** Cost basis, if any has been entered. Rows without one stay pure watch items. */
+  portfolio?: Portfolio;
+  splits?: SplitAdjustment[];
+  positionActions?: PositionActions;
   onSelect: (symbol: string, label: string) => void;
   onRemove: (symbol: string) => void;
   onSaveNote: (symbol: string, note: string) => void | Promise<void>;
@@ -49,12 +67,16 @@ export function WatchlistPanel({
   entries,
   quotes,
   trends = {},
+  portfolio,
+  splits = [],
+  positionActions,
   onSelect,
   onRemove,
   onSaveNote,
   activeSymbol,
 }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   // Empty means the list is empty -- not that pricing failed. Deriving rows
   // from the quotes made a working watchlist look unsaved whenever the market
@@ -93,9 +115,23 @@ export function WatchlistPanel({
         const direction = pct == null ? "flat" : pct > 0 ? "up" : pct < 0 ? "down" : "flat";
         const pos = yearPosition(q);
         const isEditing = editing === q.symbol;
+        const isExpanded = expanded === q.symbol;
+        const position = portfolio?.byTicker.get(q.symbol);
+        const owned = (position?.shares ?? 0) > 0;
 
         return (
-          <li key={q.symbol} className={`watch-row tone-${direction}${activeSymbol === q.symbol ? " active" : ""}`}>
+          <li
+            key={q.symbol}
+            className={
+              `watch-row tone-${direction}` +
+              (activeSymbol === q.symbol ? " active" : "") +
+              // Owned and watch-only rows stay in one list: the point is to
+              // see the whole universe at once. The marker is a hairline on
+              // the row's edge rather than a separate section.
+              (owned ? " owned" : "") +
+              (isExpanded ? " expanded" : "")
+            }
+          >
             <div className="watch-line">
               <button className="watch-main" onClick={() => onSelect(q.symbol, q.name ?? q.symbol)}>
                 <span className="watch-symbol">{q.symbol}</span>
@@ -128,20 +164,53 @@ export function WatchlistPanel({
                   {fmtChange(q.change)} ({fmtPercent(pct)})
                 </span>
 
-                <span className="watch-range" title="Where today's price sits between the 52-week low and high">
-                  {pos == null ? (
-                    <span className="watch-range-na">—</span>
-                  ) : (
-                    <>
-                      <span className="range-low">{q.yearLow?.toFixed(0)}</span>
-                      <span className="range-track">
-                        <span className="range-marker" style={{ left: `${pos * 100}%` }} />
-                      </span>
-                      <span className="range-high">{q.yearHigh?.toFixed(0)}</span>
-                    </>
-                  )}
-                </span>
+                {/* One slot, two jobs. For a row you own, what it is worth
+                    to you displaces where it sits in its 52-week range --
+                    that is the question you actually opened the app with, and
+                    the range is still a click away in the chart. */}
+                {owned && position ? (
+                  <span className="watch-position" title={`Your ${q.symbol} position`}>
+                    <span className="position-value">
+                      {position.marketValue == null ? "—" : money(position.marketValue)}
+                    </span>
+                    <span
+                      className={`position-return tone-${
+                        (position.unrealized ?? 0) > 0 ? "up" : (position.unrealized ?? 0) < 0 ? "down" : "flat"
+                      }`}
+                    >
+                      {position.unrealizedPercent == null
+                        ? "—"
+                        : signedPercent(position.unrealizedPercent)}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="watch-range" title="Where today's price sits between the 52-week low and high">
+                    {pos == null ? (
+                      <span className="watch-range-na">—</span>
+                    ) : (
+                      <>
+                        <span className="range-low">{q.yearLow?.toFixed(0)}</span>
+                        <span className="range-track">
+                          <span className="range-marker" style={{ left: `${pos * 100}%` }} />
+                        </span>
+                        <span className="range-high">{q.yearHigh?.toFixed(0)}</span>
+                      </>
+                    )}
+                  </span>
+                )}
               </button>
+
+              {positionActions && (
+                <button
+                  className={`expand-btn${isExpanded ? " open" : ""}`}
+                  onClick={() => setExpanded(isExpanded ? null : q.symbol)}
+                  aria-expanded={isExpanded}
+                  title={owned ? `Your ${q.symbol} trades` : `Record what you paid for ${q.symbol}`}
+                  aria-label={owned ? `Your ${q.symbol} trades` : `Record what you paid for ${q.symbol}`}
+                >
+                  <span aria-hidden="true">⌄</span>
+                </button>
+              )}
 
               <button
                 className={`note-btn${entry.note ? " has-note" : ""}`}
@@ -175,6 +244,18 @@ export function WatchlistPanel({
               />
             ) : (
               entry.note && <p className="watch-note">{entry.note}</p>
+            )}
+
+            {isExpanded && positionActions && (
+              <PositionDetail
+                ticker={q.symbol}
+                position={position}
+                splits={splitsFor(splits, q.symbol)}
+                onAddLot={(lot) => positionActions.onAddLot(q.symbol, lot)}
+                onDeleteLot={positionActions.onDeleteLot}
+                onApplySplit={(ratio) => positionActions.onApplySplit(q.symbol, ratio)}
+                onUndoSplit={positionActions.onUndoSplit}
+              />
             )}
           </li>
         );

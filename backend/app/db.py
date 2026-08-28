@@ -8,6 +8,7 @@ both without a second code path.
 """
 
 import json
+import uuid
 from datetime import datetime, timezone
 
 from app.engine import connect, is_postgres, q
@@ -35,8 +36,43 @@ WATCHLIST_SCHEMA = """
     )
 """
 
+# A lot is one purchase or sale, kept rather than collapsed into a single
+# "shares held" number. Adding to a position over time is normal, and only the
+# individual lots give a real weighted average cost -- one number would be
+# overwritten by the next buy and the basis lost. Negative shares are a sale,
+# with cost_per_share carrying the price sold at, which is what realised P/L
+# needs later.
+LOTS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS lots (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        ticker TEXT NOT NULL,
+        shares DOUBLE PRECISION NOT NULL,
+        cost_per_share DOUBLE PRECISION NOT NULL,
+        trade_date TEXT NOT NULL,
+        note TEXT,
+        created_at TEXT NOT NULL
+    )
+"""
+
+# A split rewrites every lot's share count and cost, which is destructive: the
+# original figures are gone once it is applied. Recording the event means a
+# ratio entered wrongly can be reversed exactly instead of leaving a basis
+# that is silently wrong forever.
+SPLITS_SCHEMA = """
+    CREATE TABLE IF NOT EXISTS splits (
+        id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        ticker TEXT NOT NULL,
+        ratio DOUBLE PRECISION NOT NULL,
+        applied_at TEXT NOT NULL
+    )
+"""
+
 TABLES = [
     WATCHLIST_SCHEMA,
+    LOTS_SCHEMA,
+    SPLITS_SCHEMA,
     """
     CREATE TABLE IF NOT EXISTS alerts (
         id TEXT PRIMARY KEY,
@@ -113,6 +149,8 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_alerts_owner ON alerts (owner_id)",
     "CREATE INDEX IF NOT EXISTS idx_alerts_pending ON alerts (triggered_at)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions (user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_lots_owner ON lots (owner_id, ticker)",
+    "CREATE INDEX IF NOT EXISTS idx_splits_owner ON splits (owner_id, ticker)",
 ]
 
 
@@ -296,7 +334,7 @@ def transfer_owner(from_owner: str, to_owner: str) -> dict[str, int]:
     Rows the account already has win, so signing in on a second device can't
     clobber the list that is already there.
     """
-    moved = {"watchlist": 0, "alerts": 0}
+    moved = {"watchlist": 0, "alerts": 0, "lots": 0}
     with connect() as conn:
         existing = {
             (r["list_name"], r["ticker"])
@@ -337,7 +375,178 @@ def transfer_owner(from_owner: str, to_owner: str) -> dict[str, int]:
         )
         moved["alerts"] = result.rowcount or 0
 
+        # Lots and their split adjustments move wholesale rather than being
+        # merged. Each lot is a distinct trade, so two of the same ticker are
+        # not duplicates the way two watchlist rows are -- de-duplicating here
+        # would quietly delete a real purchase. They travel together because a
+        # split left behind would restate lots it no longer applies to.
+        result = conn.execute(
+            q("UPDATE lots SET owner_id = :to WHERE owner_id = :from"),
+            {"to": to_owner, "from": from_owner},
+        )
+        moved["lots"] = result.rowcount or 0
+        conn.execute(
+            q("UPDATE splits SET owner_id = :to WHERE owner_id = :from"),
+            {"to": to_owner, "from": from_owner},
+        )
+
     return moved
+
+
+# --- positions ---
+
+def list_lots(owner_id: str, ticker: str | None = None) -> list[dict]:
+    """Every lot the owner has recorded, oldest trade first.
+
+    Order matters: average cost is computed by walking the lots in the order
+    they happened, so a sale is priced against the basis as it stood then.
+    """
+    sql = "SELECT * FROM lots WHERE owner_id = :o"
+    params: dict = {"o": owner_id}
+    if ticker:
+        sql += " AND ticker = :t"
+        params["t"] = ticker
+    sql += " ORDER BY trade_date, created_at"
+
+    with connect() as conn:
+        return [_row_to_lot(r) for r in conn.execute(q(sql), params).mappings()]
+
+
+def add_lot(
+    owner_id: str,
+    ticker: str,
+    shares: float,
+    cost_per_share: float,
+    trade_date: str,
+    note: str | None = None,
+) -> dict:
+    lot_id = uuid.uuid4().hex
+    with connect() as conn:
+        conn.execute(
+            q(
+                "INSERT INTO lots "
+                "(id, owner_id, ticker, shares, cost_per_share, trade_date, note, created_at) "
+                "VALUES (:i, :o, :t, :s, :c, :d, :n, :ca)"
+            ),
+            {
+                "i": lot_id,
+                "o": owner_id,
+                "t": ticker,
+                "s": float(shares),
+                "c": float(cost_per_share),
+                "d": trade_date,
+                "n": note or None,
+                "ca": now_iso(),
+            },
+        )
+    return get_lot(owner_id, lot_id)
+
+
+def get_lot(owner_id: str, lot_id: str) -> dict | None:
+    with connect() as conn:
+        row = conn.execute(
+            q("SELECT * FROM lots WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": lot_id},
+        ).mappings().first()
+        return _row_to_lot(row) if row else None
+
+
+def delete_lot(owner_id: str, lot_id: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            q("DELETE FROM lots WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": lot_id},
+        )
+
+
+def apply_split(owner_id: str, ticker: str, ratio: float) -> dict:
+    """Restate every lot of `ticker` for a share split.
+
+    A 4-for-1 split is ratio 4: four times the shares at a quarter the cost
+    each, leaving the money invested unchanged. Total cost is what must not
+    move -- it is the only figure a split does not affect -- so shares are
+    multiplied and cost per share divided by the same number.
+
+    Applied to every lot including later ones, because the alternative is
+    worse: the reader adds a lot, then remembers the split, and a
+    date-filtered version would silently skip it.
+    """
+    ratio = float(ratio)
+    split_id = uuid.uuid4().hex
+    with connect() as conn:
+        conn.execute(
+            q(
+                "UPDATE lots SET shares = shares * :r, cost_per_share = cost_per_share / :r "
+                "WHERE owner_id = :o AND ticker = :t"
+            ),
+            {"r": ratio, "o": owner_id, "t": ticker},
+        )
+        conn.execute(
+            q(
+                "INSERT INTO splits (id, owner_id, ticker, ratio, applied_at) "
+                "VALUES (:i, :o, :t, :r, :a)"
+            ),
+            {"i": split_id, "o": owner_id, "t": ticker, "r": ratio, "a": now_iso()},
+        )
+    return {"id": split_id, "ticker": ticker, "ratio": ratio, "applied_at": now_iso()}
+
+
+def undo_split(owner_id: str, split_id: str) -> bool:
+    """Reverse a split adjustment, exactly.
+
+    The point of recording splits at all: a ratio typed as 10 instead of 0.1
+    leaves every cost basis wrong by a hundredfold, and without this there is
+    no way back short of re-entering every lot from memory.
+    """
+    with connect() as conn:
+        row = conn.execute(
+            q("SELECT ticker, ratio FROM splits WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": split_id},
+        ).mappings().first()
+        if not row:
+            return False
+
+        conn.execute(
+            q(
+                "UPDATE lots SET shares = shares / :r, cost_per_share = cost_per_share * :r "
+                "WHERE owner_id = :o AND ticker = :t"
+            ),
+            {"r": float(row["ratio"]), "o": owner_id, "t": row["ticker"]},
+        )
+        conn.execute(
+            q("DELETE FROM splits WHERE owner_id = :o AND id = :i"),
+            {"o": owner_id, "i": split_id},
+        )
+    return True
+
+
+def list_splits(owner_id: str) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            q("SELECT * FROM splits WHERE owner_id = :o ORDER BY applied_at DESC"),
+            {"o": owner_id},
+        ).mappings()
+        return [
+            {
+                "id": r["id"],
+                "ticker": r["ticker"],
+                "ratio": r["ratio"],
+                "applied_at": r["applied_at"],
+            }
+            for r in rows
+        ]
+
+
+def _row_to_lot(row) -> dict:
+    return {
+        "id": row["id"],
+        "ticker": row["ticker"],
+        "shares": row["shares"],
+        "costPerShare": row["cost_per_share"],
+        "tradeDate": row["trade_date"],
+        "note": row["note"],
+        "created_at": row["created_at"],
+    }
 
 
 # --- fundamentals cache ---

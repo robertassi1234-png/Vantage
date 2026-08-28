@@ -7,6 +7,8 @@ import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
 import { TickerSearch } from "../components/TickerSearch";
 import { WatchlistPanel } from "../components/WatchlistPanel";
+import { PortfolioSummary } from "../components/PortfolioSummary";
+import { buildPortfolio } from "../positions";
 import { AlertsPanel } from "../components/AlertsPanel";
 import { BackupPanel } from "../components/BackupPanel";
 import {
@@ -15,8 +17,10 @@ import {
   type PriceAlert,
   type PricePoint,
   type Quote,
+  type Lot,
   type MarketGroup,
   type RangeKey,
+  type SplitAdjustment,
   type WatchlistEntry,
 } from "../types";
 
@@ -51,6 +55,13 @@ export function DashboardPage() {
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<PriceAlert[]>(cached?.alerts ?? []);
+  const [lots, setLots] = useState<Lot[]>(cached?.lots ?? []);
+  const [splits, setSplits] = useState<SplitAdjustment[]>(cached?.splits ?? []);
+
+  // Derived on every render rather than stored: a price refresh has to move
+  // every figure at once, and a second copy of these numbers would be a
+  // second thing to keep in step.
+  const portfolio = useMemo(() => buildPortfolio(lots, quotes), [lots, quotes]);
 
   const load = useCallback(async (refresh = false) => {
     setLoading(true);
@@ -77,6 +88,16 @@ export function DashboardPage() {
       // closed on free hosting. See NIGHT-LOG for what background delivery
       // would need.
       const alertPromise = api.checkAlerts().catch(() => null);
+      // Cost basis does not depend on the watchlist, so it starts here rather
+      // than waiting a round trip behind it. A failure leaves the rows as
+      // pure watch items, which is what they were before.
+      const positionsPromise = api
+        .getPositions()
+        .then((p) => {
+          setLots(p.lots);
+          setSplits(p.splits);
+        })
+        .catch(() => {});
 
       // Entries rather than bare tickers: the note lives alongside the symbol,
       // and one request beats two.
@@ -93,6 +114,7 @@ export function DashboardPage() {
 
       const alertResult = await alertPromise;
       if (alertResult) setAlerts(alertResult.alerts);
+      await positionsPromise;
 
       // Row trend lines are decoration on top of a row that already works, so
       // they load last and a failure is simply no line.
@@ -126,8 +148,8 @@ export function DashboardPage() {
   // next visit opens on the last thing this browser actually saw.
   useEffect(() => {
     if (loading || entries.length === 0) return;
-    writeSnapshot({ identity, entries, quotes, indices, board, alerts, trends });
-  }, [loading, identity, entries, quotes, indices, board, alerts, trends]);
+    writeSnapshot({ identity, entries, quotes, indices, board, alerts, trends, lots, splits });
+  }, [loading, identity, entries, quotes, indices, board, alerts, trends, lots, splits]);
 
   // Fetch history whenever the selected symbol or range changes.
   useEffect(() => {
@@ -204,6 +226,24 @@ export function DashboardPage() {
     setAlerts(await api.acknowledgeAlert(id));
   }
 
+  // Each of these returns the whole set back, so the lots, the splits and
+  // every figure derived from them stay in step without a second round trip.
+  function applyPositions(next: { lots: Lot[]; splits: SplitAdjustment[] }) {
+    setLots(next.lots);
+    setSplits(next.splits);
+  }
+
+  const positionActions = {
+    onAddLot: async (
+      ticker: string,
+      lot: { shares: number; costPerShare: number; tradeDate: string },
+    ) => applyPositions(await api.addLot(ticker, lot)),
+    onDeleteLot: async (id: string) => applyPositions(await api.deleteLot(id)),
+    onApplySplit: async (ticker: string, ratio: number) =>
+      applyPositions(await api.applySplit(ticker, ratio)),
+    onUndoSplit: async (id: string) => applyPositions(await api.undoSplit(id)),
+  };
+
   // Cached prices, index tiles or the market strip all count: if any of them
   // rendered, the reader is looking at a usable page.
   const hasAnyData = quotes.length > 0 || indices.length > 0 || board.length > 0;
@@ -250,14 +290,21 @@ export function DashboardPage() {
         </div>
       )}
 
+      <PortfolioSummary portfolio={portfolio} />
+
       <h3 className="section-heading">
         Watchlist
-        <span className="section-note">Click a row for its chart, or ✎ to note why you’re watching</span>
+        <span className="section-note">
+          Click a row for its chart, ⌄ for what you paid, or ✎ to note why you’re watching
+        </span>
       </h3>
       <WatchlistPanel
         entries={entries}
         quotes={quotes}
         trends={trends}
+        portfolio={portfolio}
+        splits={splits}
+        positionActions={positionActions}
         onSelect={showChart}
         onRemove={handleRemove}
         onSaveNote={handleSaveNote}

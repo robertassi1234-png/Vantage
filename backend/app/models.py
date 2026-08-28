@@ -44,3 +44,26 @@ class FedStatement(BaseModel):
     sentiment: str | None = None
     key_takeaways: list[str] = []
     fetched_at: str
+
+
+class LotRequest(BaseModel):
+    """One purchase or sale.
+
+    Negative shares record a sale, with costPerShare carrying the price sold
+    at. One shape serves both so a position's history stays a single ordered
+    list rather than two that have to be interleaved to compute anything.
+    """
+
+    shares: float
+    costPerShare: float
+    tradeDate: str
+    note: str | None = None
+
+
+class SplitRequest(BaseModel):
+    """A share split, as the multiple of new shares per old one.
+
+    4-for-1 is 4. A reverse 1-for-10 is 0.1.
+    """
+
+    ratio: float

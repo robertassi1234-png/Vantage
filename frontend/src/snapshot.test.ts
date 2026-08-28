@@ -10,6 +10,8 @@ const base: Omit<Snapshot, "savedAt"> = {
   board: [],
   alerts: [],
   trends: {},
+  lots: [],
+  splits: [],
 };
 
 beforeEach(() => localStorage.clear());
@@ -156,5 +158,35 @@ describe("a snapshot written by a different build", () => {
   it("still accepts a board that is shaped the current way", () => {
     store({ ...base, board: [{ group: "Growth", entries: [] }] });
     expect(readSnapshot("alice@example.com")).not.toBeNull();
+  });
+});
+
+describe("cached lots", () => {
+  const store = (snapshot: unknown) =>
+    localStorage.setItem("vantage.snapshot.v1", JSON.stringify({ ...(snapshot as object), savedAt: Date.now() }));
+
+  it("come back so the portfolio strip paints during a cold start", () => {
+    writeSnapshot({
+      ...base,
+      lots: [
+        {
+          id: "l1",
+          ticker: "AAPL",
+          shares: 10,
+          costPerShare: 142.3,
+          tradeDate: "2025-03-04",
+          note: null,
+          created_at: "2025-03-04",
+        },
+      ],
+    });
+    expect(readSnapshot("alice@example.com")?.lots).toHaveLength(1);
+  });
+
+  it("are refused when a share count is not a number", () => {
+    // These drive money figures. A share count read back as a string would
+    // render a portfolio worth NaN rather than simply failing to render.
+    store({ ...base, lots: [{ id: "l1", ticker: "AAPL", shares: "10", costPerShare: 142.3 }] });
+    expect(readSnapshot("alice@example.com")).toBeNull();
   });
 });

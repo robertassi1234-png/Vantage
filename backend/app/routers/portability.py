@@ -15,7 +15,7 @@ from app.space import current_owner
 
 router = APIRouter(prefix="/api", tags=["portability"])
 
-EXPORT_VERSION = 1
+EXPORT_VERSION = 2
 
 
 class ExportedAlert(BaseModel):
@@ -31,16 +31,29 @@ class ExportedEntry(BaseModel):
     note: str | None = None
 
 
+class ExportedLot(BaseModel):
+    ticker: str
+    shares: float
+    costPerShare: float
+    tradeDate: str
+    note: str | None = None
+
+
 class WorkspaceExport(BaseModel):
     version: int = EXPORT_VERSION
     exported_at: str
     lists: dict[str, list[ExportedEntry]] = Field(default_factory=dict)
     alerts: list[ExportedAlert] = Field(default_factory=list)
+    # Added in v2. Absent in a v1 file, which imports as a workspace with no
+    # cost basis rather than failing -- an older export is still a good
+    # export of what existed when it was written.
+    lots: list[ExportedLot] = Field(default_factory=list)
 
 
 class ImportResult(BaseModel):
     added: dict[str, int]
     alerts_added: int
+    lots_added: int = 0
     skipped: list[str]
 
 
@@ -60,6 +73,19 @@ def export_workspace(owner: str = Depends(current_owner)) -> WorkspaceExport:
                 note=a["note"],
             )
             for a in alerts_module.list_alerts(owner)
+        ],
+        # Exported after any split adjustment rather than alongside it: the
+        # lots as they stand already carry the restatement, so replaying the
+        # split on import would apply it a second time.
+        lots=[
+            ExportedLot(
+                ticker=lot["ticker"],
+                shares=lot["shares"],
+                costPerShare=lot["costPerShare"],
+                tradeDate=lot["tradeDate"],
+                note=lot["note"],
+            )
+            for lot in db.list_lots(owner)
         ],
     )
 
@@ -90,6 +116,8 @@ def import_workspace(
         for name in db.LIST_NAMES:
             for ticker in db.get_watchlist(owner, name):
                 db.remove_from_watchlist(ticker, owner, name)
+        for lot in db.list_lots(owner):
+            db.delete_lot(owner, lot["id"])
 
     for list_name, entries in payload.lists.items():
         if list_name not in db.LIST_NAMES:
@@ -117,4 +145,19 @@ def import_workspace(
         except alerts_module.AlertError as e:
             skipped.append(f"alert for {alert.ticker}: {e}")
 
-    return ImportResult(added=added, alerts_added=alerts_added, skipped=skipped)
+    # Lots are not de-duplicated the way tickers are: two identical trades are
+    # a real thing, so there is no safe way to tell a duplicate import from a
+    # second purchase. Merging an export twice therefore doubles the position,
+    # which is why "replace" exists.
+    lots_added = 0
+    for lot in payload.lots:
+        ticker = lot.ticker.strip().upper()
+        if not ticker or lot.shares == 0 or lot.costPerShare <= 0:
+            skipped.append(f"lot for {lot.ticker or '(no ticker)'}: incomplete")
+            continue
+        db.add_lot(owner, ticker, lot.shares, lot.costPerShare, lot.tradeDate, lot.note)
+        lots_added += 1
+
+    return ImportResult(
+        added=added, alerts_added=alerts_added, lots_added=lots_added, skipped=skipped
+    )

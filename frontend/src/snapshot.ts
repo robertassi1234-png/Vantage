@@ -1,4 +1,12 @@
-import type { IndexQuote, MarketGroup, PriceAlert, Quote, WatchlistEntry } from "./types";
+import type {
+  IndexQuote,
+  Lot,
+  MarketGroup,
+  PriceAlert,
+  Quote,
+  SplitAdjustment,
+  WatchlistEntry,
+} from "./types";
 
 /**
  * The last dashboard this browser saw, kept so the next visit paints instantly.
@@ -29,6 +37,8 @@ export interface Snapshot {
   board: MarketGroup[];
   alerts: PriceAlert[];
   trends: Record<string, number[]>;
+  lots: Lot[];
+  splits: SplitAdjustment[];
 }
 
 /**
@@ -42,7 +52,14 @@ export interface Snapshot {
  * the cost is one slow load, against a page that never comes back.
  */
 function looksUsable(snapshot: Snapshot): boolean {
-  const arrays = [snapshot.entries, snapshot.quotes, snapshot.indices, snapshot.alerts];
+  const arrays = [
+    snapshot.entries,
+    snapshot.quotes,
+    snapshot.indices,
+    snapshot.alerts,
+    snapshot.lots,
+    snapshot.splits,
+  ];
   if (!arrays.every(Array.isArray)) return false;
   // A snapshot with no watchlist saves nothing worth showing.
   if (snapshot.entries.length === 0) return false;
@@ -54,6 +71,13 @@ function looksUsable(snapshot: Snapshot): boolean {
     (g) => g && typeof g.group === "string" && Array.isArray(g.entries),
   );
   if (!groupsAreShaped) return false;
+
+  // Lots drive money figures, so a malformed one is worse than none: a share
+  // count read as undefined would render a portfolio worth NaN.
+  const lotsAreShaped = snapshot.lots.every(
+    (l) => l && typeof l.shares === "number" && typeof l.costPerShare === "number",
+  );
+  if (!lotsAreShaped) return false;
 
   if (!snapshot.trends || typeof snapshot.trends !== "object") return false;
   return Object.values(snapshot.trends).every(Array.isArray);

@@ -8,6 +8,9 @@ from app.main import app
 ALICE = {"X-Vantage-Space": "alice-abc123"}
 BOB = {"X-Vantage-Space": "bob-xyz789"}
 
+ALICE_OWNER = db.space_owner("alice-abc123")
+BOB_OWNER = db.space_owner("bob-xyz789")
+
 
 @pytest.fixture
 def client():
@@ -49,7 +52,9 @@ class TestExport:
         assert body["alerts"] == []
 
     def test_is_stamped_with_a_version(self, client):
-        assert client.get("/api/export", headers=ALICE).json()["version"] == 1
+        from app.routers.portability import EXPORT_VERSION
+
+        assert client.get("/api/export", headers=ALICE).json()["version"] == EXPORT_VERSION
 
 
 class TestImport:
@@ -173,3 +178,70 @@ class TestDisasterRecovery:
 
         assert client.get("/api/lists/watch", headers=fresh).json() == ["AAPL", "MSFT"]
         assert len(client.get("/api/alerts", headers=fresh).json()) == 1
+
+
+class TestLotsTravelToo:
+    """A backup that silently drops cost basis is worse than no backup.
+
+    The panel offering this says "move your lists between devices". Someone
+    who has entered a year of trades will read that as covering them.
+    """
+
+    def test_lots_are_exported_with_the_lists(self, client):
+        db.add_lot(ALICE_OWNER, "AAPL", 10, 142.3, "2025-03-04")
+        exported = client.get("/api/export", headers=ALICE).json()
+        assert exported["lots"] == [
+            {
+                "ticker": "AAPL",
+                "shares": 10.0,
+                "costPerShare": 142.3,
+                "tradeDate": "2025-03-04",
+                "note": None,
+            }
+        ]
+
+    def test_a_split_is_carried_in_the_restated_lots_not_replayed(self, client):
+        # The lots already carry the adjustment. Exporting the split as well
+        # and replaying it on import would apply it twice, quartering a basis
+        # that was already quartered.
+        db.add_lot(ALICE_OWNER, "AAPL", 10, 400.0, "2025-01-01")
+        db.apply_split(ALICE_OWNER, "AAPL", 4)
+
+        exported = client.get("/api/export", headers=ALICE).json()
+        client.post("/api/import", json=exported, headers=BOB)
+
+        restored = db.list_lots(BOB_OWNER)
+        assert restored[0]["shares"] == 40
+        assert restored[0]["costPerShare"] == 100.0
+
+    def test_lots_round_trip_onto_another_device(self, client):
+        db.add_lot(ALICE_OWNER, "AAPL", 10, 100.0, "2025-01-01")
+        db.add_lot(ALICE_OWNER, "AAPL", -4, 180.0, "2025-06-01")
+
+        exported = client.get("/api/export", headers=ALICE).json()
+        result = client.post("/api/import", json=exported, headers=BOB).json()
+
+        assert result["lots_added"] == 2
+        assert [l["shares"] for l in db.list_lots(BOB_OWNER)] == [10, -4]
+
+    def test_a_v1_file_still_imports_as_a_workspace_without_positions(self, client):
+        # Files written before positions existed are still good exports of
+        # what existed then.
+        legacy = {
+            "version": 1,
+            "exported_at": "2026-01-01T00:00:00+00:00",
+            "lists": {"watch": [{"ticker": "AAPL"}]},
+            "alerts": [],
+        }
+        result = client.post("/api/import", json=legacy, headers=BOB).json()
+        assert result["lots_added"] == 0
+        assert db.get_watchlist(BOB_OWNER, "watch") == ["AAPL"]
+
+    def test_replace_clears_the_old_positions_first(self, client):
+        db.add_lot(BOB_OWNER, "TSLA", 5, 200.0, "2024-01-01")
+        db.add_lot(ALICE_OWNER, "AAPL", 10, 100.0, "2025-01-01")
+
+        exported = client.get("/api/export", headers=ALICE).json()
+        client.post("/api/import?replace=true", json=exported, headers=BOB)
+
+        assert [l["ticker"] for l in db.list_lots(BOB_OWNER)] == ["AAPL"]

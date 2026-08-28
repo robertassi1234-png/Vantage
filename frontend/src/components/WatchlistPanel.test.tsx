@@ -2,7 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { WatchlistPanel } from "./WatchlistPanel";
-import type { Quote, WatchlistEntry } from "../types";
+import { buildPortfolio } from "../positions";
+import type { Lot, Quote, WatchlistEntry } from "../types";
 
 const quote = (over: Partial<Quote> = {}): Quote => ({
   symbol: "AAPL",
@@ -371,5 +372,93 @@ describe("loading and empty states", () => {
 
     expect(container.querySelector(".empty-mark")).not.toBeNull();
     expect(screen.getByText(/watchlist is empty/i)).toBeInTheDocument();
+  });
+});
+
+describe("rows you own", () => {
+  const owned = (shares: number, cost: number): Lot[] => [
+    {
+      id: "l1",
+      ticker: "AAPL",
+      shares,
+      costPerShare: cost,
+      tradeDate: "2025-01-01",
+      note: null,
+      created_at: "2025-01-01",
+    },
+  ];
+
+  const actions = {
+    onAddLot: async () => {},
+    onDeleteLot: async () => {},
+    onApplySplit: async () => {},
+    onUndoSplit: async () => {},
+  };
+
+  function renderWithPositions(lots: Lot[]) {
+    const quotes = [quote({ symbol: "AAPL", price: 150, yearLow: 100, yearHigh: 200 })];
+    return render(
+      <WatchlistPanel
+        entries={[{ ticker: "AAPL", added_at: "2025-01-01", note: null }]}
+        quotes={quotes}
+        portfolio={buildPortfolio(lots, quotes)}
+        splits={[]}
+        positionActions={actions}
+        onSelect={() => {}}
+        onRemove={() => {}}
+        onSaveNote={() => {}}
+      />,
+    );
+  }
+
+  it("shows what the holding is worth in place of the 52-week range", () => {
+    // The range is a click away in the chart; what it is worth to you is the
+    // question the app was opened with.
+    const { container } = renderWithPositions(owned(10, 100));
+    expect(screen.getByText("$1,500.00")).toBeInTheDocument();
+    expect(screen.getByText("+50.00%")).toBeInTheDocument();
+    expect(container.querySelector(".watch-range")).toBeNull();
+  });
+
+  it("keeps the 52-week range on a row you only watch", () => {
+    const { container } = renderWithPositions([]);
+    expect(container.querySelector(".watch-range")).not.toBeNull();
+    expect(container.querySelector(".watch-position")).toBeNull();
+  });
+
+  it("marks an owned row without moving it to its own section", () => {
+    // One list, so the whole universe stays visible at once.
+    const { container } = renderWithPositions(owned(10, 100));
+    expect(container.querySelector(".watch-row.owned")).not.toBeNull();
+    expect(container.querySelectorAll(".watch-row")).toHaveLength(1);
+  });
+
+  it("keeps the trades behind an expander rather than in the row", async () => {
+    renderWithPositions(owned(10, 100));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Your AAPL trades" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("invites a cost basis on a row that has none", () => {
+    renderWithPositions([]);
+    expect(
+      screen.getByRole("button", { name: "Record what you paid for AAPL" }),
+    ).toBeInTheDocument();
+  });
+
+  it("has no expander at all when positions are not wired up", () => {
+    const quotes = [quote({ symbol: "AAPL", price: 150 })];
+    render(
+      <WatchlistPanel
+        entries={[{ ticker: "AAPL", added_at: "2025-01-01", note: null }]}
+        quotes={quotes}
+        onSelect={() => {}}
+        onRemove={() => {}}
+        onSaveNote={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /trades|Record what you paid/ })).not.toBeInTheDocument();
   });
 });

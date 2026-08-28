@@ -18,6 +18,7 @@ import type {
   SignInResult,
   PeerSuggestions,
   MarketGroup,
+  PositionsResponse,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -207,6 +208,30 @@ export const api = {
     }),
 
   getPeers: () => request<PeerSuggestions>("/api/peers"),
+
+  getPositions: () => request<PositionsResponse>("/api/positions"),
+
+  addLot: (ticker: string, lot: { shares: number; costPerShare: number; tradeDate: string; note?: string | null }) =>
+    request<PositionsResponse>(`/api/positions/${encodeURIComponent(ticker)}/lots`, {
+      method: "POST",
+      body: JSON.stringify({ note: null, ...lot }),
+    }),
+
+  deleteLot: (id: string) =>
+    request<PositionsResponse>(`/api/positions/lots/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
+  applySplit: (ticker: string, ratio: number) =>
+    request<PositionsResponse>(`/api/positions/${encodeURIComponent(ticker)}/split`, {
+      method: "POST",
+      body: JSON.stringify({ ratio }),
+    }),
+
+  undoSplit: (id: string) =>
+    request<PositionsResponse>(`/api/positions/splits/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
 
   getFundamentals: (refresh = false) =>
     request<FundamentalsRow[]>(`/api/fundamentals?refresh=${refresh}`),

@@ -61,11 +61,19 @@ export function BackupPanel() {
         .map(([list, n]) => `${n} to ${list}`)
         .join(", ");
 
+      // Trades are counted separately because they are the one thing here
+      // that is not de-duplicated: two identical purchases are a real thing,
+      // so importing the same file twice doubles a position. Saying how many
+      // came in is what makes that visible.
+      const parts = [
+        added,
+        result.alerts_added ? `${result.alerts_added} alert(s)` : "",
+        result.lots_added ? `${result.lots_added} trade(s)` : "",
+      ].filter(Boolean);
+
       setStatus(
-        added || result.alerts_added
-          ? `Restored ${[added, result.alerts_added ? `${result.alerts_added} alert(s)` : ""]
-              .filter(Boolean)
-              .join(", ")}. Reload to see them.`
+        parts.length
+          ? `Restored ${parts.join(", ")}. Reload to see them.`
           : "Everything in that file was already here.",
       );
       if (result.skipped.length) setError(`Skipped: ${result.skipped.join("; ")}`);
