@@ -5,6 +5,7 @@ import { PeerSuggestions } from "../components/PeerSuggestions";
 import { downloadCsv } from "../csv";
 import { StockTable } from "../components/StockTable";
 import { ValuationTable } from "../components/ValuationTable";
+import { ProviderStatus } from "../components/ProviderStatus";
 import { TickerSearch } from "../components/TickerSearch";
 import {
   RANGES,
@@ -250,6 +251,12 @@ export function ComparisonPage() {
               peerMedian={valuation?.peerMedian ?? {}}
               loading={valuationLoading}
             />
+          )}
+
+          {/* Offered where the failure is, since that is where the question
+              gets asked. */}
+          {(valuationError || valuation?.companies.some((c) => c.error)) && (
+            <ProviderStatus />
           )}
         </>
       )}

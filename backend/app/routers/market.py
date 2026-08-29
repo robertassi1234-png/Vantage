@@ -65,6 +65,10 @@ MARKET_BOARD = [
 # snapshot rather than refetching on every page load. Daily closes only change
 # once a day, so history can be cached far longer.
 QUOTE_TTL_SECONDS = 15 * 60
+# How old a price may be and still be worth carrying past a symbol the
+# providers have stopped answering for. Bounded, because at some point
+# yesterday's number presented as today's is worse than an honest blank.
+CARRY_FORWARD_SECONDS = 24 * 60 * 60
 HISTORY_TTL_SECONDS = 12 * 60 * 60
 SPARKLINE_POINTS = 30
 
@@ -118,19 +122,37 @@ async def _priced_tiles(cache_key: str, entries: list[dict], refresh: bool) -> l
     if not quotes:
         return stale_or_fail("Couldn't fetch market prices right now.")
 
+    # The same hazard one step down. A partial outage -- one symbol answered of
+    # thirteen -- is not an empty list, so it used to be written straight over
+    # the cache and blank twelve tiles that had prices a moment earlier. Worse,
+    # it then served those blanks for the whole TTL, so a provider recovering
+    # changed nothing visible. Last known price wins over a dash.
+    previous = {
+        tile["symbol"]: tile
+        for tile in (db.get_market_cache(cache_key, CARRY_FORWARD_SECONDS) or [])
+        if isinstance(tile, dict) and tile.get("symbol")
+    }
+
     by_symbol = {q["symbol"]: q for q in quotes}
     sparklines = await asyncio.gather(*(_sparkline(e["symbol"]) for e in entries))
 
     results = []
     for entry, sparkline in zip(entries, sparklines):
         quote = by_symbol.get(entry["symbol"], {})
+        carried = previous.get(entry["symbol"], {})
+        # All three move together: a fresh price with yesterday's change would
+        # be a figure that never existed.
+        source = quote if quote.get("price") is not None else carried
         results.append(
             {
                 **entry,
-                "price": quote.get("price"),
-                "change": quote.get("change"),
-                "changePercent": quote.get("changePercent"),
-                "sparkline": sparkline,
+                "price": source.get("price"),
+                "change": source.get("change"),
+                "changePercent": source.get("changePercent"),
+                # A sparkline is cached for half a day of its own, so an empty
+                # one here is the same outage; keep the drawn line rather than
+                # flattening the tile as well.
+                "sparkline": sparkline or carried.get("sparkline") or [],
             }
         )
 

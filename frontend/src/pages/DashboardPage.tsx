@@ -8,6 +8,7 @@ import { PriceChart } from "../components/PriceChart";
 import { TickerSearch } from "../components/TickerSearch";
 import { WatchlistPanel } from "../components/WatchlistPanel";
 import { PortfolioSummary } from "../components/PortfolioSummary";
+import { ProviderStatus } from "../components/ProviderStatus";
 import { buildPortfolio } from "../positions";
 import { AlertsPanel } from "../components/AlertsPanel";
 import { BackupPanel } from "../components/BackupPanel";
@@ -379,6 +380,12 @@ export function DashboardPage() {
         onDelete={handleDeleteAlert}
         onAcknowledge={handleAcknowledgeAlert}
       />
+
+      <h3 className="section-heading">
+        Data sources
+        <span className="section-note">Which providers are answering right now</span>
+      </h3>
+      <ProviderStatus />
 
       <h3 className="section-heading">
         Backup

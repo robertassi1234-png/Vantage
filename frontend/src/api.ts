@@ -22,6 +22,7 @@ import type {
   PositionsResponse,
   JournalResponse,
   ValuationResponse,
+  ProviderStatus,
 } from "./types";
 import { getSpaceId } from "./space";
 
@@ -257,6 +258,8 @@ export const api = {
     request<JournalResponse>(`/api/journal/${encodeURIComponent(id)}/reviewed`, {
       method: "POST",
     }),
+
+  getProviderStatus: () => request<ProviderStatus>("/api/market/providers"),
 
   getValuation: (refresh = false) =>
     request<ValuationResponse>(`/api/valuation?refresh=${refresh}`),

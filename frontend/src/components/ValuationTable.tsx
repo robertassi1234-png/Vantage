@@ -50,11 +50,14 @@ export function ValuationTable({ companies, metrics, peerMedian, loading }: Prop
 
   return (
     <>
-      {failed.length > 0 && (
-        <p className="notice-line">
-          {failed.map((c) => c.ticker).join(", ")} couldn’t be valued right now.
+      {/* The provider's own words. "Couldn't be valued right now" hid the one
+          thing the reader can act on: a spent allowance, a key that was never
+          set and an endpoint outside the plan all read the same otherwise. */}
+      {failed.map((company) => (
+        <p className="notice-line" key={company.ticker}>
+          <strong>{company.ticker}</strong> — {company.error}
         </p>
-      )}
+      ))}
       {stale.length > 0 && (
         <p className="notice-line">
           Showing yesterday’s figures for {stale.map((c) => c.ticker).join(", ")} — fundamentals

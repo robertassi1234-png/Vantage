@@ -283,6 +283,28 @@ export interface ValuationMetricDef {
   percent: boolean;
 }
 
+export interface ProviderState {
+  name: string;
+  /** Whether a key is present. A missing key and a spent quota look identical otherwise. */
+  configured: boolean;
+  /** False while benched after a rate limit or a run of failures. */
+  available: boolean;
+  cooldown_seconds: number;
+  reason: string | null;
+  last_error: string | null;
+  successes: number;
+  failures: number;
+  serves_fundamentals: boolean;
+}
+
+export interface ProviderStatus {
+  providers: ProviderState[];
+  order: string[];
+  fundamentals_order: string[];
+  /** How many are both configured and answering. */
+  healthy: number;
+}
+
 export interface ValuationResponse {
   companies: ValuationCompany[];
   metrics: ValuationMetricDef[];

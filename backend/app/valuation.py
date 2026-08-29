@@ -337,7 +337,36 @@ async def fetch_valuation(ticker: str) -> dict:
     if not first_profile:
         raise FMPError(f"No data found for ticker '{ticker}'")
 
-    return build(payloads, first_profile[0], _forward_pe(first_profile[0], _rows(estimates)))
+    snapshot = build(payloads, first_profile[0], _forward_pe(first_profile[0], _rows(estimates)))
+
+    # The profile is a free endpoint and the five statement endpoints are not
+    # always on the same plan, so "profile answered, nothing else did" is a
+    # routine outcome -- and it builds a perfectly well-formed table of
+    # nothing. Returned as success it would be cached for a day, which turns a
+    # spent quota into a table that stays blank long after the quota resets.
+    # Treated as the failure it is, the cache keeps yesterday's real numbers
+    # and the next load tries again.
+    if not any(m["value"] is not None for m in snapshot["metrics"].values()):
+        raise FMPError(_why_empty([ratios, key_metrics, income, cash_flow], ticker))
+
+    return snapshot
+
+
+def _why_empty(results: list, ticker: str) -> str:
+    """The provider's own words, rather than a shrug.
+
+    A spent quota, a key that was never set and an endpoint outside the
+    current plan all look identical from the outside, and the reader is the
+    only one who can fix any of them. Reporting the first real reason is what
+    makes that possible.
+    """
+    for result in results:
+        if isinstance(result, Exception):
+            return str(result)
+    return (
+        f"No five-year fundamentals came back for {ticker}. The historical "
+        "statement endpoints may not be included in your data plan."
+    )
 
 
 def _rows(payload) -> list[dict]:

@@ -108,9 +108,17 @@ describe("the valuation table", () => {
     expect(screen.getByText("of these 2")).toBeInTheDocument();
   });
 
-  it("names a company it could not value instead of leaving a blank column", () => {
-    show([company("AAPL", { peRatio: stat() }), company("MSFT", {}, { error: "rate limit" })]);
-    expect(screen.getByText(/MSFT couldn’t be valued right now/)).toBeInTheDocument();
+  it("gives the provider's own reason, not a shrug", () => {
+    // "Couldn't be valued right now" hid the one thing the reader can act on.
+    // A spent allowance, a key never set, and an endpoint outside the plan
+    // all read identically otherwise.
+    show([
+      company("AAPL", { peRatio: stat() }),
+      company("MSFT", {}, { error: "FMP rate limit reached (free tier: 250 calls/day)" }),
+    ]);
+    const notice = screen.getByText(/250 calls\/day/);
+    // Named, so a reader with several companies knows which one failed.
+    expect(notice).toHaveTextContent("MSFT");
   });
 
   it("explains a day-old figure rather than presenting it as live", () => {

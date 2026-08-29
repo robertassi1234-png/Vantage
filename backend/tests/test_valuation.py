@@ -323,3 +323,103 @@ class TestTheEndpoint:
         assert defs["shareChange"] == "low"
         for key in ("peRatio", "priceToSales", "evToEbitda", "priceToFcf", "netDebtToEbitda"):
             assert defs[key] is None
+
+
+class TestAnEmptyTableIsAFailure:
+    """Profile answers, the statement endpoints do not.
+
+    Routine rather than exotic: the profile endpoint is free and the five
+    historical ones are not always on the same plan. It builds a perfectly
+    well-formed table of nothing, which was then cached for a day -- so a
+    quota that reset overnight showed the reader exactly the same blanks.
+    """
+
+    def test_a_table_with_no_values_anywhere_raises(self):
+        import asyncio
+
+        async def only_profile(client, path, **params):
+            if path == "profile":
+                return [{"symbol": "MSFT", "companyName": "Microsoft"}]
+            raise FMPError("Market data service returned 402")
+
+        import app.valuation as module
+
+        original = module._get
+        module._get = only_profile
+        try:
+            with pytest.raises(FMPError) as caught:
+                asyncio.run(module.fetch_valuation("MSFT"))
+        finally:
+            module._get = original
+
+        # The provider's own words, so a spent quota can be told apart from a
+        # plan that never included the endpoint.
+        assert "402" in str(caught.value)
+
+    def test_one_metric_is_enough_to_be_a_real_answer(self):
+        built = valuation.build(
+            {"ratios": quarters(priceToEarningsRatio=[28.1])},
+            {"symbol": "MSFT"},
+            None,
+        )
+        assert any(m["value"] is not None for m in built["metrics"].values())
+
+    def test_the_reason_names_the_plan_when_nothing_actually_errored(self):
+        assert "data plan" in valuation._why_empty([[], [], [], []], "MSFT")
+
+    def test_the_first_real_error_leads(self):
+        assert valuation._why_empty(
+            [[], FMPError("rate limit reached"), FMPError("later"), []], "MSFT"
+        ) == "rate limit reached"
+
+
+class TestRecoveryIsVisible:
+    def test_a_blank_table_is_not_cached_over_yesterdays_numbers(self, client, monkeypatch):
+        db.add_to_watchlist("MSFT", db.DEFAULT_OWNER, db.COMPARE_LIST)
+
+        good = valuation.build(
+            {"ratios": quarters(priceToEarningsRatio=[28.1])}, {"symbol": "MSFT"}, None
+        )
+
+        async def working(ticker):
+            return good
+
+        monkeypatch.setattr(valuation_router, "fetch_valuation", working)
+        client.get("/api/valuation")
+
+        async def broken(ticker):
+            raise FMPError("rate limit reached")
+
+        monkeypatch.setattr(valuation_router, "fetch_valuation", broken)
+        company = client.get("/api/valuation?refresh=true").json()["companies"][0]
+
+        # Yesterday's real figure survives the outage rather than being
+        # replaced by a dash.
+        assert company["metrics"]["peRatio"]["value"] == 28.1
+        assert company["stale"] is True
+
+    def test_the_provider_is_tried_again_after_a_failure(self, client, monkeypatch):
+        db.add_to_watchlist("MSFT", db.DEFAULT_OWNER, db.COMPARE_LIST)
+        calls = []
+
+        async def broken(ticker):
+            calls.append(ticker)
+            raise FMPError("rate limit reached")
+
+        monkeypatch.setattr(valuation_router, "fetch_valuation", broken)
+        client.get("/api/valuation")
+        client.get("/api/valuation")
+
+        # A failure must not be cached as an answer, or a quota resetting
+        # overnight would be invisible until someone hit Refresh.
+        assert len(calls) == 2
+
+    def test_the_reason_reaches_the_reader(self, client, monkeypatch):
+        db.add_to_watchlist("MSFT", db.DEFAULT_OWNER, db.COMPARE_LIST)
+
+        async def broken(ticker):
+            raise FMPError("FMP rate limit reached (free tier: 250 calls/day)")
+
+        monkeypatch.setattr(valuation_router, "fetch_valuation", broken)
+        company = client.get("/api/valuation").json()["companies"][0]
+        assert "250 calls/day" in company["error"]

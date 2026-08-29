@@ -36,6 +36,12 @@ function stub(over: Record<string, unknown> = {}) {
   vi.spyOn(api, "getPeers").mockResolvedValue({ suggestions: [], based_on: [], error: null });
   vi.spyOn(api, "getValuation").mockResolvedValue({ companies: [], metrics: [], peerMedian: {} });
   vi.spyOn(api, "searchSymbols").mockResolvedValue([]);
+  vi.spyOn(api, "getProviderStatus").mockResolvedValue({
+    providers: [],
+    order: [],
+    fundamentals_order: [],
+    healthy: 0,
+  });
   for (const [key, value] of Object.entries(over)) {
     vi.spyOn(api, key as keyof typeof api).mockImplementation(value as never);
   }

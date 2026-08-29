@@ -246,3 +246,80 @@ class TestMarketRoutes:
 
 def test_health(client):
     assert client.get("/api/health").json() == {"status": "ok"}
+
+
+class TestPartialQuoteOutages:
+    """A provider answering for some symbols and not others.
+
+    The failure this guards is not the tile going blank for one load -- it is
+    that the blank was then cached, so a provider recovering changed nothing
+    the reader could see until the TTL expired.
+    """
+
+    def priced(self, board) -> int:
+        return sum(1 for group in board for e in group["entries"] if e["price"] is not None)
+
+    def stub(self, monkeypatch, answered: set[str] | None):
+        async def fetch(symbols):
+            wanted = symbols if answered is None else [s for s in symbols if s in answered]
+            return [
+                {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0}
+                for s in wanted
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", fetch)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+    def test_tiles_keep_their_last_price_when_a_symbol_stops_answering(
+        self, client, monkeypatch
+    ):
+        self.stub(monkeypatch, None)
+        before = self.priced(client.get("/api/market/board").json())
+        assert before == 13
+
+        self.stub(monkeypatch, {"XLK"})
+        after = self.priced(client.get("/api/market/board?refresh=true").json())
+        assert after == before
+
+    def test_a_symbol_that_does_answer_gets_the_new_price(self, client, monkeypatch):
+        self.stub(monkeypatch, None)
+        client.get("/api/market/board")
+
+        async def one_moved(symbols):
+            return [{"symbol": "XLK", "price": 250.0, "change": 2.0, "changePercent": 0.8}]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", one_moved)
+        board = client.get("/api/market/board?refresh=true").json()
+        tiles = {e["symbol"]: e for group in board for e in group["entries"]}
+        assert tiles["XLK"]["price"] == 250.0
+        assert tiles["XLY"]["price"] == 100.0
+
+    def test_a_carried_tile_keeps_the_change_that_belongs_to_its_price(
+        self, client, monkeypatch
+    ):
+        # A fresh price beside yesterday's change would be a figure that never
+        # existed on any day.
+        async def full(symbols):
+            return [
+                {"symbol": s, "price": 100.0, "change": 5.0, "changePercent": 5.3}
+                for s in symbols
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", full)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+        client.get("/api/market/board")
+
+        self.stub(monkeypatch, {"XLK"})
+        board = client.get("/api/market/board?refresh=true").json()
+        tiles = {e["symbol"]: e for group in board for e in group["entries"]}
+        assert (tiles["XLY"]["price"], tiles["XLY"]["change"]) == (100.0, 5.0)
+
+    def test_recovery_is_visible_rather_than_waiting_out_the_cache(
+        self, client, monkeypatch
+    ):
+        self.stub(monkeypatch, {"XLK"})
+        client.get("/api/market/board")
+
+        self.stub(monkeypatch, None)
+        board = client.get("/api/market/board?refresh=true").json()
+        assert self.priced(board) == 13
