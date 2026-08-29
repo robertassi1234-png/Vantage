@@ -67,7 +67,9 @@ describe("the comparison page", () => {
     });
     render(<ComparisonPage />);
     expect(await screen.findByText("AAPL")).toBeInTheDocument();
-    expect(screen.getByText("rate limited")).toBeInTheDocument();
+    // Awaited: the valuation request resolves a tick after the rows it is
+    // gated on, so a synchronous read here raced it.
+    expect(await screen.findByText("rate limited")).toBeInTheDocument();
   });
 
   it("shows the valuation section once there is something to value", async () => {

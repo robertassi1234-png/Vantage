@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
 import { ApiError, api } from "../api";
 import type { Quote, WatchlistEntry } from "../types";
@@ -65,6 +65,10 @@ function stubApi(over: Partial<typeof api> = {}) {
 const watchlistRow = (symbol: string) =>
   within(document.querySelector(".watchlist") as HTMLElement).getByText(symbol);
 
+// The page seeds itself from a snapshot in localStorage, which survives a
+// render and would otherwise carry one case's prices into the next -- making
+// a page with nothing on it look like a page with data.
+beforeEach(() => localStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
 describe("DashboardPage watchlist", () => {
@@ -273,5 +277,141 @@ describe("DashboardPage positions", () => {
 
     expect(await screen.findByText("$150.00")).toBeInTheDocument();
     expect(screen.queryByText("Portfolio value")).not.toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage explains missing prices", () => {
+  const index = {
+    symbol: "^GSPC",
+    label: "S&P 500",
+    blurb: "500 large US companies",
+    price: 7711.76,
+    change: -19.23,
+    changePercent: -0.25,
+    sparkline: [],
+  };
+
+  it("gives the reason even while cached figures are still on screen", async () => {
+    // The state that hid it: indices served from cache count as data, so the
+    // banner was suppressed and the watchlist said "prices are unavailable"
+    // without ever saying why -- the one thing the reader can act on.
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getIndices: async () => [index],
+      getQuotes: async () => {
+        throw new ApiError("Market data is rate limited across every provider right now.");
+      },
+    });
+    render(<DashboardPage />);
+
+    expect(await screen.findByText(/rate limited across every provider/)).toBeInTheDocument();
+  });
+
+  it("says it quietly, because most of the page is working", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getIndices: async () => [index],
+      getQuotes: async () => {
+        throw new ApiError("Market data is rate limited across every provider right now.");
+      },
+    });
+    const { container } = render(<DashboardPage />);
+
+    await screen.findByText(/rate limited across every provider/);
+    expect(container.querySelector(".alert-quiet")).not.toBeNull();
+    expect(container.querySelector(".alert-error")).toBeNull();
+  });
+
+  it("stays loud when there is nothing on the page at all", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getIndices: async () => {
+        throw new ApiError("Market data is rate limited across every provider right now.");
+      },
+      getQuotes: async () => {
+        throw new ApiError("Market data is rate limited across every provider right now.");
+      },
+    });
+    const { container } = render(<DashboardPage />);
+
+    await screen.findByText(/rate limited across every provider/);
+    expect(container.querySelector(".alert-error")).not.toBeNull();
+  });
+
+  it("offers the provider list next to the reason", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getIndices: async () => [index],
+      getQuotes: async () => {
+        throw new ApiError("Market data is rate limited across every provider right now.");
+      },
+    });
+    render(<DashboardPage />);
+
+    await screen.findByText(/rate limited across every provider/);
+    // Two: one beside the reason, one in its own section further down.
+    expect(screen.getAllByRole("button", { name: "Why is data missing?" })).toHaveLength(2);
+  });
+
+  it("keeps offering a retry while the server is only waking up", async () => {
+    // A cold start is not a provider problem, so it gets the retry rather
+    // than a list of providers that are all perfectly healthy.
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getIndices: async () => {
+        throw new ApiError("Couldn't reach the server.", true);
+      },
+      getQuotes: async () => [],
+    });
+    render(<DashboardPage />);
+
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+});
+
+describe("DashboardPage survives a server it does not recognise", () => {
+  // The site and the API deploy separately, so the page can be minutes ahead
+  // of the server it is talking to. Each of these used to take the whole
+  // dashboard down -- prices, watchlist and chart -- over one panel.
+  const stillWorks = async () => {
+    render(<DashboardPage />);
+    expect(await screen.findByText("MSFT")).toBeInTheDocument();
+    expect(screen.getByText("$300.00")).toBeInTheDocument();
+  };
+
+  it("keeps the prices when positions come back as a bare list", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getQuotes: async () => [quote("MSFT")],
+      getPositions: async () => [] as never,
+    });
+    await stillWorks();
+  });
+
+  it("keeps the prices when the journal comes back as a bare list", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getQuotes: async () => [quote("MSFT")],
+      getJournal: async () => [] as never,
+    });
+    await stillWorks();
+  });
+
+  it("keeps the prices when positions answer with no lots field", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getQuotes: async () => [quote("MSFT")],
+      getPositions: async () => ({}) as never,
+    });
+    await stillWorks();
+  });
+
+  it("keeps the prices when the journal answers with no entries field", async () => {
+    stubApi({
+      getListEntries: async () => entries("MSFT"),
+      getQuotes: async () => [quote("MSFT")],
+      getJournal: async () => ({}) as never,
+    });
+    await stillWorks();
   });
 });

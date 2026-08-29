@@ -185,6 +185,20 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   );
 }
 
+/**
+ * A response's list field, or an empty one.
+ *
+ * Responses are trusted only as far as their shape. The site and the API
+ * deploy separately, so a server minutes behind the page, or a proxy that
+ * rewrote a body, hands back something the types promised would be an array
+ * and is not. Reaching a render, that took the whole page down -- losing the
+ * prices, the watchlist and the chart over one feature the reader may not
+ * even be using.
+ */
+export function list<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export const api = {
   searchSymbols: (query: string) =>
     request<SymbolMatch[]>(`/api/search?q=${encodeURIComponent(query)}`),

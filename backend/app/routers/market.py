@@ -97,17 +97,31 @@ def provider_status() -> dict:
     }
 
 
+def _has_prices(payload) -> bool:
+    """Whether a cached payload is worth anything to a reader.
+
+    A payload of tiles that are all blank is not a cheaper version of the
+    board, it is the absence of one. Treating it as a cache hit meant serving
+    dashes for a full TTL without asking any provider, and writing it meant
+    those dashes outlived the outage that produced them. Neither is a cache;
+    both are a way to stay broken.
+    """
+    return isinstance(payload, list) and any(
+        isinstance(tile, dict) and tile.get("price") is not None for tile in payload
+    )
+
+
 async def _priced_tiles(cache_key: str, entries: list[dict], refresh: bool) -> list[dict]:
     """Quote plus a short sparkline for each entry, cached as one payload."""
     if not refresh:
         cached = db.get_market_cache(cache_key, QUOTE_TTL_SECONDS)
-        if cached is not None:
+        if _has_prices(cached):
             return cached
 
     def stale_or_fail(detail: str):
         """Old prices beat blank tiles; a blank cache is worth an honest error."""
         cached = db.get_market_cache(cache_key, max_age_seconds=7 * 24 * 3600)
-        if cached is not None:
+        if _has_prices(cached):
             return cached
         raise HTTPException(status_code=502, detail=detail)
 
@@ -155,6 +169,15 @@ async def _priced_tiles(cache_key: str, entries: list[dict], refresh: bool) -> l
                 "sparkline": sparkline or carried.get("sparkline") or [],
             }
         )
+
+    if not _has_prices(results):
+        # Nothing came back priced, and nothing was carried. Writing that
+        # would put the outage in the cache and serve it back for the next
+        # fifteen minutes, so the recovery nobody can see starts here. Reach
+        # further back for real prices instead, and leave the cache alone so
+        # the next load asks again.
+        older = db.get_market_cache(cache_key, max_age_seconds=7 * 24 * 3600)
+        return older if _has_prices(older) else results
 
     db.set_market_cache(cache_key, results)
     return results

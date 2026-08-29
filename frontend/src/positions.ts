@@ -59,6 +59,10 @@ export interface Portfolio {
 /** Lots grouped by ticker, each in the order the trades happened. */
 export function groupLots(lots: Lot[]): Map<string, Lot[]> {
   const grouped = new Map<string, Lot[]>();
+  // Guarded rather than assumed: this is the first thing a render touches,
+  // so anything malformed reaching it takes the page down rather than the
+  // one panel that asked for it.
+  if (!Array.isArray(lots)) return grouped;
   for (const lot of lots) {
     const existing = grouped.get(lot.ticker);
     if (existing) existing.push(lot);

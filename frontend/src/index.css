@@ -3517,3 +3517,15 @@ td.band-high {
     gap: 0.1rem;
   }
 }
+
+/* A reason, not an alarm. Shown when the page still has figures on it: the
+   reader needs to know why some are missing, not to be told the app is
+   broken when most of it is working. */
+.alert-quiet {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.alert-quiet p {
+  color: var(--muted);
+}

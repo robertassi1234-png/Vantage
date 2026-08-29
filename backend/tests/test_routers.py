@@ -323,3 +323,65 @@ class TestPartialQuoteOutages:
         self.stub(monkeypatch, None)
         board = client.get("/api/market/board?refresh=true").json()
         assert self.priced(board) == 13
+
+
+class TestBlanksAreNeverCached:
+    """A board with no prices on it is not a cheap board, it is no board.
+
+    Cached, it is served for a full TTL without asking any provider -- so the
+    moment a provider recovers is invisible, which is exactly how a dashboard
+    stays blank long after the outage that blanked it.
+    """
+
+    def all_priced(self, board) -> int:
+        return sum(1 for group in board for e in group["entries"] if e["price"] is not None)
+
+    def stub(self, monkeypatch, fetch):
+        monkeypatch.setattr(market_router, "fetch_quotes", fetch)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+    async def _priceless(self, symbols):
+        return [{"symbol": s, "price": None, "change": None} for s in symbols]
+
+    async def _good(self, symbols):
+        return [
+            {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0} for s in symbols
+        ]
+
+    def test_a_blank_round_does_not_overwrite_older_real_prices(self, client, monkeypatch):
+        self.stub(monkeypatch, self._good)
+        client.get("/api/market/board")
+
+        self.stub(monkeypatch, self._priceless)
+        assert self.all_priced(client.get("/api/market/board?refresh=true").json()) == 13
+
+    def test_a_blank_board_is_not_served_as_a_cache_hit(self, client, monkeypatch):
+        # With nothing ever cached, a blank round must not become the answer
+        # every visitor gets for the next fifteen minutes.
+        self.stub(monkeypatch, self._priceless)
+        client.get("/api/market/board")
+
+        calls = []
+
+        async def counted(symbols):
+            calls.append(symbols)
+            return await self._good(symbols)
+
+        self.stub(monkeypatch, counted)
+        board = client.get("/api/market/board").json()
+
+        assert calls, "a blank board was served instead of asking a provider again"
+        assert self.all_priced(board) == 13
+
+    def test_recovery_reaches_the_reader_on_the_next_load(self, client, monkeypatch):
+        self.stub(monkeypatch, self._priceless)
+        client.get("/api/market/board")
+        self.stub(monkeypatch, self._good)
+        assert self.all_priced(client.get("/api/market/board").json()) == 13
+
+    def test_a_blank_board_still_renders_its_labels(self, client, monkeypatch):
+        # The section has to keep existing during an outage: a vanished
+        # feature reads as one that was never built.
+        self.stub(monkeypatch, self._priceless)
+        board = client.get("/api/market/board").json()
+        assert [g["group"] for g in board] == ["Growth", "Defensive", "Cyclical", "Global & other"]

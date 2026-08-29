@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, list } from "../api";
 import { JournalComposer } from "../components/JournalComposer";
 import { JournalEntryCard } from "../components/JournalEntryCard";
 import { TickerSearch } from "../components/TickerSearch";
@@ -30,11 +30,12 @@ export function JournalPage() {
 
   const apply = useCallback(
     (body: { entries: JournalEntry[]; review_due: string[]; suggested_tags: string[]; review_after_days: number }) => {
-      setEntries(body.entries);
-      setReviewDue(body.review_due);
-      setSuggestedTags(body.suggested_tags);
-      setReviewAfterDays(body.review_after_days);
-      return body.entries;
+      const written = list<JournalEntry>(body?.entries);
+      setEntries(written);
+      setReviewDue(list<string>(body?.review_due));
+      setSuggestedTags(list<string>(body?.suggested_tags));
+      if (typeof body?.review_after_days === "number") setReviewAfterDays(body.review_after_days);
+      return written;
     },
     [],
   );

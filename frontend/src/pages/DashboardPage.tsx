@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCurrentAccount } from "../AccountContext";
-import { ApiError, api } from "../api";
+import { ApiError, api, list } from "../api";
 import { describeAge, readSnapshot, writeSnapshot } from "../snapshot";
 import { MarketBoard } from "../components/MarketBoard";
 import { MarketIndices } from "../components/MarketIndices";
@@ -98,8 +98,8 @@ export function DashboardPage() {
       const positionsPromise = api
         .getPositions()
         .then((p) => {
-          setLots(p.lots);
-          setSplits(p.splits);
+          setLots(list<Lot>(p?.lots));
+          setSplits(list<SplitAdjustment>(p?.splits));
         })
         .catch(() => {});
       // Same reasoning: what you wrote about a company does not depend on the
@@ -107,8 +107,8 @@ export function DashboardPage() {
       const journalPromise = api
         .getJournal()
         .then((j) => {
-          setJournal(j.entries);
-          setJournalTags(j.suggested_tags);
+          setJournal(list<JournalEntry>(j?.entries));
+          setJournalTags(list<string>(j?.suggested_tags));
         })
         .catch(() => {});
 
@@ -242,8 +242,8 @@ export function DashboardPage() {
   // Each of these returns the whole set back, so the lots, the splits and
   // every figure derived from them stay in step without a second round trip.
   function applyPositions(next: { lots: Lot[]; splits: SplitAdjustment[] }) {
-    setLots(next.lots);
-    setSplits(next.splits);
+    setLots(list<Lot>(next?.lots));
+    setSplits(list<SplitAdjustment>(next?.splits));
   }
 
   const positionActions = {
@@ -265,7 +265,7 @@ export function DashboardPage() {
       entry: { body: string; tags: string[]; priceAtWrite: number | null },
     ) => {
       const result = await api.addJournalEntry(ticker, entry);
-      setJournal(result.entries);
+      setJournal(list<JournalEntry>(result?.entries));
     },
   };
 
@@ -300,17 +300,24 @@ export function DashboardPage() {
         </p>
       )}
 
-      {/* Only when the page has nothing to show. Each panel already says its
-          own piece -- the watchlist counts what it couldn't price, the market
-          strip says prices are unavailable -- so a red banner on top of that
-          makes a working page look broken. */}
-      {error && !hasAnyData && (
-        <div className={`alert ${waking ? "alert-info" : "alert-error"}`}>
+      {/* Loud only when the page has nothing to show. A red banner over a
+          working page makes it look broken -- but suppressing the message
+          entirely was worse: the panels say "prices are unavailable" without
+          ever saying why, and the reason is the one thing the reader can act
+          on. So it stays, quietly, next to the way to look further. */}
+      {error && (
+        <div
+          className={`alert ${
+            waking ? "alert-info" : hasAnyData ? "alert-quiet" : "alert-error"
+          }`}
+        >
           <p>{error}</p>
-          {waking && (
+          {waking ? (
             <button className="link-btn" onClick={() => load()}>
               Try again
             </button>
+          ) : (
+            <ProviderStatus />
           )}
         </div>
       )}

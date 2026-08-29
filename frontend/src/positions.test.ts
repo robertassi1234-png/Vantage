@@ -215,3 +215,12 @@ describe("describing a split the way people say it", () => {
     expect(describeSplit(ratio)).toBe(expected);
   });
 });
+
+describe("defending the maths from a malformed response", () => {
+  it("treats a non-list of lots as no lots rather than crashing", () => {
+    // This is the first thing a render touches, so anything malformed
+    // reaching it takes the page down rather than the panel that asked.
+    expect(groupLots(undefined as never).size).toBe(0);
+    expect(buildPortfolio(undefined as never, []).hasPositions).toBe(false);
+  });
+});
