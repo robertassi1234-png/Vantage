@@ -65,6 +65,10 @@ MARKET_BOARD = [
 # snapshot rather than refetching on every page load. Daily closes only change
 # once a day, so history can be cached far longer.
 QUOTE_TTL_SECONDS = 15 * 60
+# The sector board is context, not a ticker tape: which parts of the market
+# are leading does not change meaningfully inside an hour, and refreshing it
+# four times as often costs four times the allowance for no reader benefit.
+BOARD_TTL_SECONDS = 60 * 60
 # How old a price may be and still be worth carrying past a symbol the
 # providers have stopped answering for. Bounded, because at some point
 # yesterday's number presented as today's is worse than an honest blank.
@@ -111,10 +115,12 @@ def _has_prices(payload) -> bool:
     )
 
 
-async def _priced_tiles(cache_key: str, entries: list[dict], refresh: bool) -> list[dict]:
+async def _priced_tiles(
+    cache_key: str, entries: list[dict], refresh: bool, ttl: int = QUOTE_TTL_SECONDS
+) -> list[dict]:
     """Quote plus a short sparkline for each entry, cached as one payload."""
     if not refresh:
-        cached = db.get_market_cache(cache_key, QUOTE_TTL_SECONDS)
+        cached = db.get_market_cache(cache_key, ttl)
         if _has_prices(cached):
             return cached
 
@@ -209,7 +215,7 @@ async def get_trends(symbols: str, refresh: bool = False) -> dict[str, list[floa
 async def get_board(refresh: bool = False) -> list[dict]:
     """The wider market, grouped into themes the strip rotates through."""
     entries = [e for group in MARKET_BOARD for e in group["entries"]]
-    tiles = await _priced_tiles("board", entries, refresh)
+    tiles = await _priced_tiles("board", entries, refresh, ttl=BOARD_TTL_SECONDS)
     by_symbol = {t["symbol"]: t for t in tiles}
 
     return [

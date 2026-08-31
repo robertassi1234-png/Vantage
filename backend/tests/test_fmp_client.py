@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -275,3 +277,82 @@ class TestFetchQuotes:
 
         patch_get(monkeypatch, explode)
         assert await fmp_client.fetch_quotes([]) == []
+
+
+class TestQuotesAreBatched:
+    """One request for a whole dashboard, not one per tile.
+
+    The free allowance is 250 calls a day. Per-symbol fetching spent it in
+    about seven page loads, which is the real reason the app kept running out
+    of data rather than anything the reader was doing.
+    """
+
+    def calls(self, monkeypatch, responder):
+        seen = []
+
+        async def fake_get(client, path, **params):
+            seen.append((path, params.get("symbol", "")))
+            return responder(params.get("symbol", ""))
+
+        monkeypatch.setattr(fmp_client, "_get", fake_get)
+        monkeypatch.setattr(fmp_client.settings, "fmp_api_key", "k")
+        return seen
+
+    def row(self, symbol, price=100.0):
+        return {"symbol": symbol, "price": price, "change": 1.0, "changePercentage": 1.0}
+
+    def test_a_whole_board_costs_one_request(self, monkeypatch):
+        symbols = ["XLK", "XLY", "XLC", "XLV", "XLP", "XLU", "XLF", "XLI", "XLE"]
+        seen = self.calls(
+            monkeypatch, lambda asked: [self.row(s) for s in asked.split(",")]
+        )
+        quotes = asyncio.run(fmp_client.fetch_quotes(symbols))
+
+        assert len(seen) == 1
+        assert [q["symbol"] for q in quotes] == symbols
+
+    def test_symbols_the_batch_missed_are_asked_for_individually(self, monkeypatch):
+        def responder(asked):
+            # A service that quietly answers only the first of a list.
+            first = asked.split(",")[0]
+            return [self.row(first)]
+
+        seen = self.calls(monkeypatch, responder)
+        quotes = asyncio.run(fmp_client.fetch_quotes(["AAPL", "MSFT"]))
+
+        assert [q["symbol"] for q in quotes] == ["AAPL", "MSFT"]
+        # The batch, then one for what it left out.
+        assert len(seen) == 2
+
+    def test_a_refused_batch_falls_back_to_the_old_behaviour(self, monkeypatch):
+        def responder(asked):
+            if "," in asked:
+                raise FMPError("Market data service returned 400")
+            return [self.row(asked)]
+
+        seen = self.calls(monkeypatch, responder)
+        quotes = asyncio.run(fmp_client.fetch_quotes(["AAPL", "MSFT"]))
+
+        # Same result as before batching existed, for one extra call.
+        assert [q["symbol"] for q in quotes] == ["AAPL", "MSFT"]
+        assert len(seen) == 3
+
+    def test_a_long_watchlist_splits_rather_than_making_one_huge_url(self, monkeypatch):
+        symbols = [f"SYM{i}" for i in range(45)]
+        seen = self.calls(
+            monkeypatch, lambda asked: [self.row(s) for s in asked.split(",")]
+        )
+        asyncio.run(fmp_client.fetch_quotes(symbols))
+        assert len(seen) == 3
+
+    def test_duplicates_are_asked_for_once(self, monkeypatch):
+        seen = self.calls(
+            monkeypatch, lambda asked: [self.row(s) for s in asked.split(",")]
+        )
+        quotes = asyncio.run(fmp_client.fetch_quotes(["AAPL", "aapl", "AAPL"]))
+        assert len(quotes) == 1
+        assert seen[0][1] == "AAPL"
+
+    def test_a_symbol_nobody_has_is_left_out_rather_than_faked(self, monkeypatch):
+        self.calls(monkeypatch, lambda asked: [])
+        assert asyncio.run(fmp_client.fetch_quotes(["NOPE"])) == []

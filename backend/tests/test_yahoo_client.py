@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -181,3 +183,130 @@ class TestTransportErrors:
         response = httpx.Response(200, request=request, text="<html>nope</html>")
         with pytest.raises(YahooError, match="malformed"):
             await yahoo_client._get_json(self.stub(response=response), "url")
+
+
+class TestQuotesAreBatched:
+    """Yahoo is the keyless fallback, so it carries the load when a key runs
+    out -- and seventeen requests in a burst from shared hosting is exactly
+    what gets an address rate limited in the first place."""
+
+    def spark(self, rows: dict) -> dict:
+        return {
+            symbol: {"symbol": symbol, "close": [prev, price], "chartPreviousClose": prev}
+            for symbol, (prev, price) in rows.items()
+        }
+
+    def install(self, monkeypatch, handler):
+        seen = []
+
+        async def fake_get(client, url, **params):
+            seen.append((url, params))
+            return handler(url, params)
+
+        monkeypatch.setattr(yahoo_client, "_get_json", fake_get)
+        return seen
+
+    def test_a_whole_board_costs_one_request(self, monkeypatch):
+        rows = {"XLK": (100.0, 110.0), "XLV": (50.0, 49.0), "GLD": (200.0, 202.0)}
+        seen = self.install(monkeypatch, lambda url, p: self.spark(rows))
+
+        quotes = asyncio.run(yahoo_client.fetch_quotes(list(rows)))
+
+        assert len(seen) == 1
+        assert seen[0][0] == yahoo_client.SPARK_URL
+        assert {q["symbol"] for q in quotes} == set(rows)
+
+    def test_the_day_move_comes_from_the_previous_close(self, monkeypatch):
+        self.install(monkeypatch, lambda url, p: self.spark({"XLK": (100.0, 110.0)}))
+        quote = asyncio.run(yahoo_client.fetch_quotes(["XLK"]))[0]
+        assert quote["price"] == 110.0
+        assert quote["change"] == 10.0
+        assert quote["changePercent"] == pytest.approx(10.0)
+
+    def test_the_nested_shape_is_read_too(self, monkeypatch):
+        # This endpoint has shipped as a bare mapping and as a result list;
+        # pinning to one goes blank the day it changes.
+        nested = {
+            "spark": {
+                "result": [
+                    {
+                        "symbol": "XLK",
+                        "response": [
+                            {
+                                "meta": {"symbol": "XLK", "chartPreviousClose": 100.0},
+                                "indicators": {"quote": [{"close": [100.0, 110.0]}]},
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+        self.install(monkeypatch, lambda url, p: nested)
+        assert asyncio.run(yahoo_client.fetch_quotes(["XLK"]))[0]["price"] == 110.0
+
+    def test_symbols_the_batch_missed_fall_back_to_the_chart(self, monkeypatch):
+        def handler(url, params):
+            if url == yahoo_client.SPARK_URL:
+                return self.spark({"XLK": (100.0, 110.0)})
+            return {
+                "chart": {
+                    "result": [
+                        {
+                            "meta": {
+                                "symbol": "GLD",
+                                "regularMarketPrice": 202.0,
+                                "chartPreviousClose": 200.0,
+                                "longName": "SPDR Gold",
+                            }
+                        }
+                    ],
+                    "error": None,
+                }
+            }
+
+        seen = self.install(monkeypatch, handler)
+        quotes = asyncio.run(yahoo_client.fetch_quotes(["XLK", "GLD"]))
+
+        assert {q["symbol"] for q in quotes} == {"XLK", "GLD"}
+        # One batch, then one chart call for the symbol it left out.
+        assert len(seen) == 2
+        # The chart carries the name; the batch does not.
+        assert next(q for q in quotes if q["symbol"] == "GLD")["name"] == "SPDR Gold"
+
+    def test_a_dead_batch_endpoint_costs_a_call_and_nothing_else(self, monkeypatch):
+        def handler(url, params):
+            if url == yahoo_client.SPARK_URL:
+                raise yahoo_client.YahooError("Yahoo Finance returned 404")
+            symbol = url.rsplit("/", 1)[-1]
+            return {
+                "chart": {
+                    "result": [
+                        {"meta": {"symbol": symbol, "regularMarketPrice": 5.0,
+                                  "chartPreviousClose": 4.0}}
+                    ],
+                    "error": None,
+                }
+            }
+
+        self.install(monkeypatch, handler)
+        quotes = asyncio.run(yahoo_client.fetch_quotes(["XLK", "GLD"]))
+        assert {q["symbol"] for q in quotes} == {"XLK", "GLD"}
+
+    def test_a_row_with_no_usable_price_falls_back_rather_than_rendering_blank(
+        self, monkeypatch
+    ):
+        def handler(url, params):
+            if url == yahoo_client.SPARK_URL:
+                return {"XLK": {"symbol": "XLK", "close": [None, None]}}
+            return {
+                "chart": {
+                    "result": [
+                        {"meta": {"symbol": "XLK", "regularMarketPrice": 110.0,
+                                  "chartPreviousClose": 100.0}}
+                    ],
+                    "error": None,
+                }
+            }
+
+        self.install(monkeypatch, handler)
+        assert asyncio.run(yahoo_client.fetch_quotes(["XLK"]))[0]["price"] == 110.0

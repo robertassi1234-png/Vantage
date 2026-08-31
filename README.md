@@ -331,6 +331,34 @@ the quarterly endpoints follow the spellings FMP has used across API
 generations and are read defensively; if a column comes back empty for every
 company, that is where to look.
 
+## What a page load costs
+
+The free data allowances are small -- 250 calls a day on Financial Modeling
+Prep -- so the app is built to spend as few as it can.
+
+Quotes go out as one request for a whole batch of symbols rather than one per
+symbol. That matters more than it sounds: a dashboard shows four indices and
+thirteen sector tiles, and fetching those individually cost seventeen calls
+before the watchlist was even priced. Seven page loads spent the entire day's
+allowance. Batched, the same page costs two.
+
+Not every provider takes a symbol list, and the ones that do have changed how
+across API generations, so every batch has a per-symbol fallback behind it. If
+the batch form is refused the app behaves exactly as it did before, one call
+worse off. A refusal that means "you are out of quota" is the exception: that
+is passed straight up so the app moves to the next provider rather than
+spending another call per symbol on a service that has already said no.
+
+Everything is cached for as long as it stays true. Quotes for fifteen minutes,
+the sector board for an hour -- which parts of the market are leading is
+context, not a ticker tape -- price history for twelve hours, and company
+fundamentals for a day, since they only change quarterly.
+
+**If data still goes missing, open "Data sources" on the dashboard.** It says
+which providers have a key, which are resting off a rate limit and for how
+long. A key that was never set and a spent allowance look identical from the
+outside, and only one of them is fixed by waiting.
+
 ## Why the first load is slow, and what helps
 
 A free instance stops after 15 minutes with no traffic, and starting it again

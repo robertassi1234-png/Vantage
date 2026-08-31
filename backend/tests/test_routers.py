@@ -385,3 +385,105 @@ class TestBlanksAreNeverCached:
         self.stub(monkeypatch, self._priceless)
         board = client.get("/api/market/board").json()
         assert [g["group"] for g in board] == ["Growth", "Defensive", "Cyclical", "Global & other"]
+
+
+class TestTheBoardCostsLess:
+    """Which parts of the market are leading is context, not a ticker tape.
+
+    The whole point of the free tier being 250 calls a day is that nothing
+    should be refetched more often than it changes.
+    """
+
+    def test_the_board_is_kept_longer_than_the_headline_indices(self, client):
+        assert market_router.BOARD_TTL_SECONDS > market_router.QUOTE_TTL_SECONDS
+
+    def test_a_second_load_inside_the_window_asks_nobody(self, client, monkeypatch):
+        calls = []
+
+        async def counted(symbols):
+            calls.append(symbols)
+            return [
+                {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0}
+                for s in symbols
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", counted)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+        client.get("/api/market/board")
+        client.get("/api/market/board")
+        assert len(calls) == 1
+
+    def test_the_thirteen_symbols_go_out_as_one_request(self, client, monkeypatch):
+        # Batched at the client, so the whole board is one call rather than
+        # thirteen. This is the difference between seven page loads a day and
+        # a hundred.
+        batches = []
+
+        async def counted(symbols):
+            batches.append(list(symbols))
+            return [
+                {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0}
+                for s in symbols
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", counted)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+        client.get("/api/market/board")
+        assert len(batches) == 1
+        assert len(batches[0]) == 13
+
+
+class TestADayOfUse:
+    """What a dashboard actually costs, in provider calls.
+
+    Pinned because this is the difference between the app working and the app
+    being out of data by lunchtime, and because it is invisible: nothing fails
+    when a page quietly asks for one symbol at a time.
+    """
+
+    def cost(self, client, monkeypatch, paths: list[str]) -> dict:
+        from app import fmp_client
+
+        calls = []
+
+        async def counted(http, path, **params):
+            calls.append(path)
+            if path == "quote":
+                return [
+                    {"symbol": s, "price": 100.0, "change": 1.0, "changePercentage": 1.0}
+                    for s in params["symbol"].split(",")
+                ]
+            return []
+
+        monkeypatch.setattr(fmp_client, "_get", counted)
+        monkeypatch.setattr(fmp_client.settings, "fmp_api_key", "k")
+        for path in paths:
+            client.get(path)
+        return {
+            "quotes": sum(1 for p in calls if p == "quote"),
+            "history": sum(1 for p in calls if "historical" in p),
+        }
+
+    def test_a_cold_dashboard_asks_for_quotes_twice_not_seventeen_times(
+        self, client, monkeypatch
+    ):
+        # Seventeen symbols: four indices and thirteen sector tiles. One
+        # request each spent a 250-call allowance in about seven page loads.
+        cost = self.cost(client, monkeypatch, ["/api/market/indices", "/api/market/board"])
+        assert cost["quotes"] == 2
+
+    def test_a_warm_dashboard_asks_for_nothing(self, client, monkeypatch):
+        cost = self.cost(
+            client,
+            monkeypatch,
+            ["/api/market/indices", "/api/market/board"] * 4,
+        )
+        assert cost["quotes"] == 2
+        assert cost["history"] == 17
+
+    def test_a_watchlist_is_one_request_however_long_it_is(self, client, monkeypatch):
+        symbols = ",".join(f"SYM{i}" for i in range(15))
+        cost = self.cost(client, monkeypatch, [f"/api/market/quotes?symbols={symbols}"])
+        assert cost["quotes"] == 1
