@@ -362,14 +362,14 @@ function resetGame() {
  * 3. AUDIO — tiny oscillator beeps, no external files
  * ------------------------------------------------------------------- */
 const Audio = {
-  ctx: null, muted: false,
+  ctx: null, muted: false, lastShot: 0, lastKill: 0,
   init() {
     if (this.ctx) return;
     try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.ctx = null; }
   },
   beep(freq, dur = 0.06, type = 'square', vol = 0.04, slide = 0) {
     if (this.muted || !this.ctx) return;
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx.state === 'suspended') { this.ctx.resume(); return; }
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -382,12 +382,22 @@ const Audio = {
     osc.start(t); osc.stop(t + dur + 0.02);
   },
   shoot(type) {
+    // Rate-limit: many towers firing at 2x would otherwise create hundreds
+    // of oscillator nodes per second.
+    const now = performance.now();
+    if (now - this.lastShot < 45) return;
+    this.lastShot = now;
     if (type === 'sniper') this.beep(900, 0.08, 'sawtooth', 0.03, -600);
     else if (type === 'splash') this.beep(180, 0.12, 'triangle', 0.05, -100);
     else if (type === 'frost') this.beep(1200, 0.05, 'sine', 0.025, 300);
     else this.beep(600, 0.04, 'square', 0.02, -200);
   },
-  kill() { this.beep(320, 0.1, 'triangle', 0.04, -200); },
+  kill() {
+    const now = performance.now();
+    if (now - this.lastKill < 60) return;
+    this.lastKill = now;
+    this.beep(320, 0.1, 'triangle', 0.04, -200);
+  },
   place() { this.beep(440, 0.08, 'sine', 0.05, 220); },
   upgrade() { this.beep(520, 0.07, 'sine', 0.05, 300); setTimeout(() => this.beep(780, 0.1, 'sine', 0.05, 200), 70); },
   sell() { this.beep(500, 0.08, 'sine', 0.04, -250); },
@@ -752,7 +762,9 @@ function explode(p) {
   spawnParticles(p.x, p.y, '#ffe6a3', 6, 40);
   G.particles.push({ x: p.x, y: p.y, ring: true, r: 4, maxR: p.splash, life: 0.25, maxLife: 0.25, color: '#ff9b7a' });
   const r2 = p.splash * p.splash;
-  for (const e of G.enemies) {
+  // Snapshot: killing a splitter pushes new enemies into G.enemies, and
+  // those should not be caught by the same blast.
+  for (const e of G.enemies.slice()) {
     if (e.dead) continue;
     const dx = e.x - p.x, dy = e.y - p.y;
     if (dx * dx + dy * dy <= r2) damageEnemy(e, p.damage, p.tower);
@@ -1098,6 +1110,8 @@ const ui = {
 };
 
 let toastTimer = 0;
+let uiPanelKey = '';     // what the info panel currently shows
+let uiPreviewWave = -1;  // which wave the preview chips describe
 function toast(msg) {
   ui.toast.textContent = msg;
   ui.toast.classList.add('show');
@@ -1244,53 +1258,71 @@ function updateUI() {
     if (b.disabled) b.classList.remove('selected');
   }
 
-  // next-wave preview
-  const next = waveSummary(G.waveActive ? G.wave + 1 : G.wave + 1);
-  ui.preview.innerHTML = Object.entries(next)
-    .map(([type, n]) => `<span class="chip"><i style="background:${ENEMY_TYPES[type].color}"></i>${ENEMY_TYPES[type].name} ×${n}</span>`)
-    .join('');
+  // next-wave preview (rebuilt only when the wave number changes)
+  if (uiPreviewWave !== G.wave + 1) {
+    uiPreviewWave = G.wave + 1;
+    const next = waveSummary(G.wave + 1);
+    ui.preview.innerHTML = Object.entries(next)
+      .map(([type, n]) => `<span class="chip"><i style="background:${ENEMY_TYPES[type].color}"></i>${ENEMY_TYPES[type].name} ×${n}</span>`)
+      .join('');
+  }
 
-  // selected tower panel
+  // selected tower panel. The buttons are only rebuilt when the selection
+  // or level changes; values that tick every kill (kills, affordability)
+  // are patched in place so a click never lands on a replaced element.
   const t = G.selectedTower;
+  let key;
+  if (t) key = `tower|${t.id}|${t.level}`;
+  else if (G.selectedType) key = `place|${G.selectedType}`;
+  else key = 'idle';
+  if (key !== uiPanelKey) {
+    uiPanelKey = key;
+    if (t) {
+      const def = TOWER_TYPES[t.type];
+      const st = towerStats(t);
+      const maxed = t.level >= def.tiers.length - 1;
+      const nextTier = maxed ? null : def.tiers[t.level + 1];
+      const refund = Math.round(towerValue(t) * SELL_REFUND);
+      ui.infoTitle.textContent = `${def.name} — Lv ${t.level + 1}/${def.tiers.length}`;
+      const line = (label, cur, nxt, fmt = v => v) =>
+        `<div class="kv"><span>${label}</span><b>${fmt(cur)}${nxt != null && nxt !== cur ? ` <span style="color:var(--good)">→ ${fmt(nxt)}</span>` : ''}</b></div>`;
+      let html = '';
+      html += line('Damage', st.damage, nextTier && nextTier.damage);
+      html += line('Range', st.range, nextTier && nextTier.range);
+      html += line('Fire rate', st.fireRate, nextTier && nextTier.fireRate, v => v.toFixed(1) + '/s');
+      if (st.splash) html += line('Splash radius', st.splash, nextTier && nextTier.splash);
+      if (st.slow) html += line('Slow', st.slow, nextTier && nextTier.slow, v => Math.round(v * 100) + '%');
+      html += `<div class="kv"><span>Kills</span><b id="info-kills">${t.kills}</b></div>`;
+      html += `<div class="row" style="margin-top:8px;">
+        <button id="btn-upgrade" class="primary" ${maxed ? 'disabled' : ''}>${maxed ? 'Max level' : `Upgrade (${nextTier.cost}g)`}</button>
+        <button id="btn-sell" class="danger">Sell (+${refund}g)</button>
+      </div>
+      <div class="hint" style="margin-top:6px;"><kbd>U</kbd> upgrade · <kbd>S</kbd> sell · right-click to deselect</div>`;
+      ui.infoBody.innerHTML = html;
+      $('btn-upgrade').addEventListener('click', () => upgradeTower(t));
+      $('btn-sell').addEventListener('click', () => sellTower(t));
+    } else if (G.selectedType) {
+      const def = TOWER_TYPES[G.selectedType];
+      const st = def.tiers[0];
+      ui.infoTitle.textContent = `Placing: ${def.name}`;
+      ui.infoBody.innerHTML = `
+        <div class="kv"><span>Cost</span><b>${def.cost}g</b></div>
+        <div class="kv"><span>Damage</span><b>${st.damage}</b></div>
+        <div class="kv"><span>Range</span><b>${st.range}</b></div>
+        <div class="kv"><span>Fire rate</span><b>${st.fireRate.toFixed(1)}/s</b></div>
+        ${st.splash ? `<div class="kv"><span>Splash radius</span><b>${st.splash}</b></div>` : ''}
+        ${st.slow ? `<div class="kv"><span>Slow</span><b>${Math.round(st.slow * 100)}%</b></div>` : ''}
+        <div class="hint" style="margin-top:6px;">Click a green tile to build. Right-click or <kbd>Esc</kbd> to cancel.</div>`;
+    } else {
+      ui.infoTitle.textContent = 'Selected';
+      ui.infoBody.innerHTML = 'Click a placed tower to inspect, upgrade or sell it. Hover a tower to see its range.';
+    }
+  }
   if (t) {
     const def = TOWER_TYPES[t.type];
-    const st = towerStats(t);
     const maxed = t.level >= def.tiers.length - 1;
-    const nextTier = maxed ? null : def.tiers[t.level + 1];
-    const refund = Math.round(towerValue(t) * SELL_REFUND);
-    ui.infoTitle.textContent = `${def.name} — Lv ${t.level + 1}/${def.tiers.length}`;
-    const line = (label, cur, nxt, fmt = v => v) =>
-      `<div class="kv"><span>${label}</span><b>${fmt(cur)}${nxt !== undefined && nxt !== cur ? ` <span style="color:var(--good)">→ ${fmt(nxt)}</span>` : ''}</b></div>`;
-    let html = '';
-    html += line('Damage', st.damage, nextTier && nextTier.damage);
-    html += line('Range', st.range, nextTier && nextTier.range);
-    html += line('Fire rate', st.fireRate, nextTier && nextTier.fireRate, v => v.toFixed(1) + '/s');
-    if (st.splash) html += line('Splash radius', st.splash, nextTier && nextTier.splash);
-    if (st.slow) html += line('Slow', st.slow, nextTier && nextTier.slow, v => Math.round(v * 100) + '%');
-    html += line('Kills', t.kills);
-    html += `<div class="row" style="margin-top:8px;">
-      <button id="btn-upgrade" class="primary" ${maxed || G.gold < nextTier.cost ? 'disabled' : ''}>${maxed ? 'Max level' : `Upgrade (${nextTier.cost}g)`}</button>
-      <button id="btn-sell" class="danger">Sell (+${refund}g)</button>
-    </div>
-    <div class="hint" style="margin-top:6px;"><kbd>U</kbd> upgrade · <kbd>S</kbd> sell · right-click to deselect</div>`;
-    ui.infoBody.innerHTML = html;
-    $('btn-upgrade').addEventListener('click', () => upgradeTower(t));
-    $('btn-sell').addEventListener('click', () => sellTower(t));
-  } else if (G.selectedType) {
-    const def = TOWER_TYPES[G.selectedType];
-    const st = def.tiers[0];
-    ui.infoTitle.textContent = `Placing: ${def.name}`;
-    ui.infoBody.innerHTML = `
-      <div class="kv"><span>Cost</span><b>${def.cost}g</b></div>
-      <div class="kv"><span>Damage</span><b>${st.damage}</b></div>
-      <div class="kv"><span>Range</span><b>${st.range}</b></div>
-      <div class="kv"><span>Fire rate</span><b>${st.fireRate.toFixed(1)}/s</b></div>
-      ${st.splash ? `<div class="kv"><span>Splash radius</span><b>${st.splash}</b></div>` : ''}
-      ${st.slow ? `<div class="kv"><span>Slow</span><b>${Math.round(st.slow * 100)}%</b></div>` : ''}
-      <div class="hint" style="margin-top:6px;">Click a green tile to build. Right-click or <kbd>Esc</kbd> to cancel.</div>`;
-  } else {
-    ui.infoTitle.textContent = 'Selected';
-    ui.infoBody.innerHTML = 'Click a placed tower to inspect, upgrade or sell it. Hover a tower to see its range.';
+    const k = $('info-kills'); if (k) k.textContent = t.kills;
+    const up = $('btn-upgrade'); if (up) up.disabled = maxed || G.gold < def.tiers[t.level + 1].cost;
   }
 }
 
@@ -1335,20 +1367,43 @@ function step(dt) {
   }
 }
 
+let frameCount = 0;
+let lastError = '';
+
 function frame(now) {
+  frameCount++;
   let dt = (now - last) / 1000;
   last = now;
   if (dt > 0.1) dt = 0.1;
-  if (G.started && !G.paused && !G.over) {
-    const sub = 1 / 120;
-    let total = dt * G.speed;
-    while (total > 0) { const s = Math.min(sub, total); step(s); total -= s; }
-  } else if (!G.started) {
-    G.time += dt; // keep the path dashes animating on the title screen
+  if (dt < 0) dt = 0;
+  try {
+    if (G.started && !G.paused && !G.over) {
+      const sub = 1 / 120;
+      let total = dt * G.speed;
+      while (total > 0) { const s = Math.min(sub, total); step(s); total -= s; }
+    } else if (!G.started) {
+      G.time += dt; // keep the path dashes animating on the title screen
+    }
+    render();
+  } catch (err) {
+    // A bug in one frame must never stop the game: report it and carry on.
+    const msg = String(err && err.message || err);
+    if (msg !== lastError) { lastError = msg; console.error(err); toast('Recovered from an error: ' + msg); }
   }
-  render();
   requestAnimationFrame(frame);
 }
+
+// Watchdog: if the browser ever drops the animation-frame chain (it can
+// happen after a long tab suspension), restart it.
+let watchdogSeen = -1;
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (frameCount === watchdogSeen) { last = performance.now(); requestAnimationFrame(frame); }
+  watchdogSeen = frameCount;
+}, 1500);
+
+// After a tab switch, don't let the first frame back count the whole absence.
+document.addEventListener('visibilitychange', () => { last = performance.now(); });
 
 // ---- boot ----
 loadMap(0);
