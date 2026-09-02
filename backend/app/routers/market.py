@@ -69,6 +69,11 @@ QUOTE_TTL_SECONDS = 15 * 60
 # are leading does not change meaningfully inside an hour, and refreshing it
 # four times as often costs four times the allowance for no reader benefit.
 BOARD_TTL_SECONDS = 60 * 60
+# How long a payload with gaps in it is honoured. The gaps are the outage, and
+# serving them for the full window would hide a provider's recovery for an
+# hour. Short enough to notice the recovery, long enough not to hammer a
+# provider that is still down.
+INCOMPLETE_TTL_SECONDS = 2 * 60
 # How old a price may be and still be worth carrying past a symbol the
 # providers have stopped answering for. Bounded, because at some point
 # yesterday's number presented as today's is worse than an honest blank.
@@ -101,6 +106,16 @@ def provider_status() -> dict:
     }
 
 
+def _complete(payload, entries: list[dict]) -> bool:
+    """Whether every tile in a cached payload carries a price."""
+    if not isinstance(payload, list):
+        return False
+    by_symbol = {t.get("symbol"): t for t in payload if isinstance(t, dict)}
+    return all(
+        (by_symbol.get(e["symbol"]) or {}).get("price") is not None for e in entries
+    )
+
+
 def _has_prices(payload) -> bool:
     """Whether a cached payload is worth anything to a reader.
 
@@ -122,7 +137,13 @@ async def _priced_tiles(
     if not refresh:
         cached = db.get_market_cache(cache_key, ttl)
         if _has_prices(cached):
-            return cached
+            # A complete payload is good for the full window. One with gaps
+            # is served, but only briefly: one symbol answering out of
+            # thirteen is not a board, and it used to sit there as a cache
+            # hit for an hour after every other symbol had come back.
+            window = ttl if _complete(cached, entries) else INCOMPLETE_TTL_SECONDS
+            if db.get_market_cache(cache_key, window) is not None:
+                return cached
 
     def stale_or_fail(detail: str):
         """Old prices beat blank tiles; a blank cache is worth an honest error."""
@@ -185,6 +206,14 @@ async def _priced_tiles(
         older = db.get_market_cache(cache_key, max_age_seconds=7 * 24 * 3600)
         return older if _has_prices(older) else results
 
+    fresh = sum(1 for e in entries if (by_symbol.get(e["symbol"]) or {}).get("price") is not None)
+    if fresh == 0:
+        # Every price on the board was carried from an earlier round. They
+        # are still worth showing, but writing them back would stamp today's
+        # time on yesterday's numbers -- and turn the same blanks into a
+        # fresh cache hit for another window.
+        return results
+
     db.set_market_cache(cache_key, results)
     return results
 
@@ -240,7 +269,11 @@ async def _sparkline(symbol: str) -> list[float]:
     except FMPError:
         return []
     closes = [p["close"] for p in points][-SPARKLINE_POINTS:]
-    db.set_market_cache(key, closes)
+    # An empty series is a provider with nothing to say, not a chart with
+    # nothing on it. Cached, it drew a flat line for twelve hours after the
+    # provider had recovered.
+    if closes:
+        db.set_market_cache(key, closes)
     return closes
 
 

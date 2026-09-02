@@ -487,3 +487,133 @@ class TestADayOfUse:
         symbols = ",".join(f"SYM{i}" for i in range(15))
         cost = self.cost(client, monkeypatch, [f"/api/market/quotes?symbols={symbols}"])
         assert cost["quotes"] == 1
+
+
+class TestAGappyBoardHealsQuickly:
+    """One symbol answering out of thirteen is not a board.
+
+    It used to sit there as a cache hit for the full window -- an hour, once
+    the board moved to an hourly cache -- after every other symbol had come
+    back. That is the state a reader saw: one tile priced, twelve blank, and
+    nothing changing however long they waited.
+    """
+
+    def priced(self, board) -> int:
+        return sum(1 for g in board for e in g["entries"] if e["price"] is not None)
+
+    def only(self, monkeypatch, answered: set[str]):
+        async def fetch(symbols):
+            return [
+                {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0}
+                for s in symbols
+                if s in answered
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", fetch)
+        monkeypatch.setattr(market_router, "fetch_history", _no_history)
+
+    def age(self, key: str, seconds: int) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from app.engine import connect, q
+
+        when = (datetime.now(timezone.utc) - timedelta(seconds=seconds)).isoformat()
+        with connect() as conn:
+            conn.execute(
+                q("UPDATE market_cache SET fetched_at = :f WHERE cache_key = :k"),
+                {"f": when, "k": key},
+            )
+
+    def test_a_recovery_reaches_the_next_visitor_within_minutes(self, client, monkeypatch):
+        self.only(monkeypatch, {"VWO"})
+        client.get("/api/market/board")
+        assert self.priced(client.get("/api/market/board").json()) == 1
+
+        # A few minutes on, well inside the board's hourly window.
+        self.age("board", market_router.INCOMPLETE_TTL_SECONDS + 1)
+
+        every = {e["symbol"] for g in market_router.MARKET_BOARD for e in g["entries"]}
+        self.only(monkeypatch, every)
+        assert self.priced(client.get("/api/market/board").json()) == 13
+
+    def test_a_gappy_board_is_not_refetched_on_every_single_load(self, client, monkeypatch):
+        # Short-lived, not zero-lived: a provider that is still down should
+        # not be asked again by every visitor in the same minute.
+        self.only(monkeypatch, {"VWO"})
+        client.get("/api/market/board")
+
+        calls = []
+
+        async def counted(symbols):
+            calls.append(symbols)
+            return []
+
+        monkeypatch.setattr(market_router, "fetch_quotes", counted)
+        client.get("/api/market/board")
+        assert calls == []
+
+    def test_a_complete_board_is_still_kept_for_the_full_window(self, client, monkeypatch):
+        every = {e["symbol"] for g in market_router.MARKET_BOARD for e in g["entries"]}
+        self.only(monkeypatch, every)
+        client.get("/api/market/board")
+
+        calls = []
+
+        async def counted(symbols):
+            calls.append(symbols)
+            return []
+
+        monkeypatch.setattr(market_router, "fetch_quotes", counted)
+        client.get("/api/market/board")
+        assert calls == []
+
+    def test_carried_prices_do_not_restamp_the_cache(self, client, monkeypatch):
+        # A round that got nothing new must not write yesterday's numbers
+        # back with today's time on them -- that turns the same blanks into a
+        # fresh cache hit for another window.
+        every = {e["symbol"] for g in market_router.MARKET_BOARD for e in g["entries"]}
+        self.only(monkeypatch, every)
+        client.get("/api/market/board")
+
+        self.only(monkeypatch, set())
+        client.get("/api/market/board?refresh=true")
+
+        calls = []
+
+        async def counted(symbols):
+            calls.append(symbols)
+            return [
+                {"symbol": s, "price": 101.0, "change": 1.0, "changePercent": 1.0}
+                for s in symbols
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_quotes", counted)
+        board = client.get("/api/market/board").json()
+        # Still served from the complete payload's own window, not a restamp.
+        assert self.priced(board) == 13
+
+
+class TestEmptySparklinesAreNotCached:
+    def test_a_recovered_history_draws_on_the_next_load(self, client, monkeypatch):
+        # An empty series is a provider with nothing to say, not a chart with
+        # nothing on it. Cached, it drew a flat line for twelve hours.
+        seen = []
+
+        async def empty_then_full(symbol, range_key):
+            seen.append(symbol)
+            if len(seen) <= 4:
+                return []
+            return [{"date": f"2026-01-0{i}", "close": float(i)} for i in range(1, 6)]
+
+        async def full(symbols):
+            return [
+                {"symbol": s, "price": 100.0, "change": 1.0, "changePercent": 1.0}
+                for s in symbols
+            ]
+
+        monkeypatch.setattr(market_router, "fetch_history", empty_then_full)
+        monkeypatch.setattr(market_router, "fetch_quotes", full)
+
+        client.get("/api/market/indices")
+        tiles = client.get("/api/market/indices?refresh=true").json()
+        assert all(t["sparkline"] for t in tiles)

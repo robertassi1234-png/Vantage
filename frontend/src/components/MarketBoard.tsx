@@ -121,36 +121,66 @@ export function MarketBoard({ groups, loading = false, onSelect, activeSymbol }:
         {current.entries.map((entry) => {
           const tone = toneOf(entry.changePercent);
           const isActive = activeSymbol === entry.symbol;
+          const unpriced = entry.price == null;
 
           return (
             <li key={entry.symbol}>
               <button
-                className={`board-tile tone-${tone}${isActive ? " active" : ""}`}
+                className={`board-tile tone-${tone}${isActive ? " active" : ""}${
+                  unpriced ? " unpriced" : ""
+                }`}
                 onClick={() => onSelect(entry.symbol, entry.label)}
-                aria-label={`${entry.label}, ${fmtPrice(entry.price)}, ${fmtPercent(
-                  entry.changePercent,
-                )}. Show its chart.`}
+                aria-label={
+                  unpriced
+                    ? `${entry.label}, no price yet. Show its chart.`
+                    : `${entry.label}, ${fmtPrice(entry.price)}, ${fmtPercent(
+                        entry.changePercent,
+                      )}. Show its chart.`
+                }
               >
                 <span className="tile-top">
                   <span className="tile-label">{entry.label}</span>
                   <span className="tile-symbol">{entry.symbol}</span>
                 </span>
 
-                <span className="tile-value">{fmtPrice(entry.price)}</span>
-
-                <span className="tile-delta">
-                  {/* An arrow as well as the colour: direction must not be
-                      carried by hue alone. */}
-                  <span aria-hidden="true">
-                    {tone === "up" ? "▲" : tone === "down" ? "▼" : "■"}
-                  </span>{" "}
-                  {fmtPercent(entry.changePercent)}
-                </span>
+                {/* A tile with no price is waiting, not broken. Dashes and a
+                    flat line read as a rendering fault; a shimmer while the
+                    page is loading and a quiet word afterwards read as what
+                    they are. */}
+                {unpriced ? (
+                  loading ? (
+                    <>
+                      <span className="shimmer shimmer-value" aria-hidden="true" />
+                      <span className="shimmer tile-delta-shimmer" aria-hidden="true" />
+                    </>
+                  ) : (
+                    <>
+                      <span className="tile-value tile-value-muted">—</span>
+                      <span className="tile-delta tile-unpriced">No price yet</span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <span className="tile-value">{fmtPrice(entry.price)}</span>
+                    <span className="tile-delta">
+                      {/* An arrow as well as the colour: direction must not
+                          be carried by hue alone. */}
+                      <span aria-hidden="true">
+                        {tone === "up" ? "▲" : tone === "down" ? "▼" : "■"}
+                      </span>{" "}
+                      {fmtPercent(entry.changePercent)}
+                    </span>
+                  </>
+                )}
 
                 <span className="tile-blurb">{entry.blurb}</span>
 
                 <span className="tile-spark">
-                  <Sparkline values={entry.sparkline} direction={tone} width={132} height={34} bleed />
+                  {entry.sparkline.length > 1 ? (
+                    <Sparkline values={entry.sparkline} direction={tone} width={132} height={34} bleed />
+                  ) : (
+                    <span className="tile-spark-empty" aria-hidden="true" />
+                  )}
                 </span>
               </button>
             </li>

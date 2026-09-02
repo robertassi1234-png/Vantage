@@ -3529,3 +3529,172 @@ td.band-high {
 .alert-quiet p {
   color: var(--muted);
 }
+
+
+/* =====================================================================
+   Sharpening pass. Later in the file on purpose: these are refinements to
+   rules above, and winning by cascade keeps the earlier passes readable as
+   the history they are.
+   ===================================================================== */
+
+/* --- Tiles: equal height, a direction edge, and a crisper lift ----------- */
+
+.index-grid,
+.board-grid {
+  align-items: stretch;
+}
+
+.index-tile,
+.board-tile {
+  position: relative;
+  height: 100%;
+  min-height: 156px;
+  border-radius: var(--radius-lg);
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+/* A two-pixel edge in the tile's own tone. Direction is already carried by
+   the arrow and the colour of the delta; this lets a row of tiles be read
+   from across the room without reading any of them. */
+.index-tile::before,
+.board-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--tone, transparent);
+  opacity: 0.85;
+}
+
+.index-tile.tone-flat::before,
+.board-tile.tone-flat::before,
+.board-tile.unpriced::before {
+  background: transparent;
+}
+
+.index-tile:hover,
+.board-tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--divider);
+  box-shadow: var(--shadow-md);
+}
+
+.index-tile:active,
+.board-tile:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.index-tile:focus-visible,
+.board-tile:focus-visible,
+.board-tab:focus-visible,
+.board-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.index-value,
+.tile-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- A tile with no price is waiting, not broken -------------------------- */
+
+.board-tile.unpriced {
+  color: var(--muted);
+}
+
+.board-tile.unpriced .tile-label {
+  color: var(--text);
+}
+
+.tile-value-muted {
+  color: var(--muted-2);
+  font-weight: 500;
+}
+
+.tile-unpriced {
+  color: var(--muted-2);
+  font-family: var(--font-sans);
+  font-style: italic;
+}
+
+.tile-delta-shimmer {
+  width: 38%;
+  height: 0.7rem;
+}
+
+.tile-spark-empty {
+  display: block;
+  height: 34px;
+}
+
+/* --- Header: a touch tighter, a touch sharper ---------------------------- */
+
+.app-header nav button {
+  letter-spacing: -0.005em;
+}
+
+.app-header h1 {
+  letter-spacing: -0.02em;
+}
+
+/* --- Sections: one rhythm, quieter notes --------------------------------- */
+
+.section-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+  letter-spacing: -0.012em;
+}
+
+.section-note {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted-2);
+  letter-spacing: 0;
+}
+
+.page-subtitle {
+  color: var(--muted);
+}
+
+/* --- Buttons: a firmer press ---------------------------------------------- */
+
+.btn {
+  transition:
+    background-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.15s ease;
+}
+
+.btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+/* --- Cards: the same three rungs everywhere ------------------------------ */
+
+.watchlist,
+.chart-card,
+.alerts-panel,
+.backup-panel,
+.journal-entry,
+.journal-composer,
+.provider-status,
+.portfolio-strip,
+.valuation-scroll,
+.empty-state {
+  border-radius: var(--radius-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .index-tile:hover,
+  .board-tile:hover,
+  .btn:not(:disabled):active {
+    transform: none;
+  }
+}

@@ -160,3 +160,54 @@ describe("rotation", () => {
     expect(dots).toHaveLength(3);
   });
 });
+
+describe("a tile with no price", () => {
+  const group = (price: number | null, sparkline: number[] = []) => [
+    {
+      group: "Growth",
+      entries: [
+        { symbol: "XLK", label: "Technology", blurb: "Software", price, change: null, changePercent: null, sparkline },
+      ],
+    },
+  ];
+
+  it("shimmers while the page is still loading", () => {
+    // Dashes and a flat line read as a rendering fault. A tile that is
+    // waiting should look like it is waiting.
+    const { container } = render(
+      <MarketBoard groups={group(null)} loading onSelect={() => {}} />,
+    );
+    expect(container.querySelectorAll(".board-tile .shimmer").length).toBeGreaterThan(0);
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  it("says so quietly once loading has finished", () => {
+    render(<MarketBoard groups={group(null)} loading={false} onSelect={() => {}} />);
+    expect(screen.getByText("No price yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Technology, no price yet/ })).toBeInTheDocument();
+  });
+
+  it("draws no sparkline for a series with nothing in it", () => {
+    const { container } = render(
+      <MarketBoard groups={group(null)} loading={false} onSelect={() => {}} />,
+    );
+    expect(container.querySelector(".tile-spark svg")).toBeNull();
+    expect(container.querySelector(".tile-spark-empty")).not.toBeNull();
+  });
+
+  it("still marks the label as the thing to read", () => {
+    const { container } = render(
+      <MarketBoard groups={group(null)} loading={false} onSelect={() => {}} />,
+    );
+    expect(container.querySelector(".board-tile.unpriced")).not.toBeNull();
+    expect(screen.getByText("Technology")).toBeInTheDocument();
+  });
+
+  it("renders normally the moment a price arrives", () => {
+    render(
+      <MarketBoard groups={group(312.9, [1, 2, 3])} loading={false} onSelect={() => {}} />,
+    );
+    expect(screen.getByText("$312.90")).toBeInTheDocument();
+    expect(screen.queryByText("No price yet")).not.toBeInTheDocument();
+  });
+});
