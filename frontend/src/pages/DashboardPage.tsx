@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useCurrentAccount } from "../AccountContext";
 import { ApiError, api, list } from "../api";
 import { describeAge, readSnapshot, writeSnapshot } from "../snapshot";
-import { MarketBoard } from "../components/MarketBoard";
 import { MarketIndices } from "../components/MarketIndices";
 import { PriceChart } from "../components/PriceChart";
 import { TickerSearch } from "../components/TickerSearch";
@@ -76,16 +75,12 @@ export function DashboardPage() {
       // a whole round trip on a page that already waits on a sleeping server.
       // Painted the moment it lands rather than at a later await, so a slow
       // market call cannot hold back the watchlist or vice versa.
-      const marketPromise = Promise.allSettled([
-        api.getIndices(refresh),
-        api.getMarketBoard(refresh),
-      ]).then((results) => {
-        const [index, board] = results;
+      const marketPromise = Promise.allSettled([api.getIndices(refresh)]).then((results) => {
+        const [index] = results;
         if (index.status === "fulfilled") {
           setIndices(index.value);
           setServedFrom(null);
         }
-        if (board.status === "fulfilled") setBoard(board.value);
         return results;
       });
       // Alerts are evaluated here because nothing runs while the app is
@@ -356,21 +351,6 @@ export function DashboardPage() {
         </div>
       )}
 
-      <h3 className="section-heading">
-        Under the surface
-        <span className="section-note">
-          How each part of the market is doing — click any for its chart
-        </span>
-      </h3>
-      {/* Rendered whether or not the data arrived. Hiding the section on an
-          empty response made a whole feature vanish during an outage, which
-          reads as "it was never built" rather than "prices are down". */}
-      <MarketBoard
-        groups={board}
-        loading={loading}
-        onSelect={showChart}
-        activeSymbol={chartSymbol}
-      />
 
       <h3 className="section-heading">
         Price alerts
