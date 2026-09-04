@@ -40,7 +40,7 @@ export function DashboardPage() {
   const [entries, setEntries] = useState<WatchlistEntry[]>(cached?.entries ?? []);
   const [quotes, setQuotes] = useState<Quote[]>(cached?.quotes ?? []);
   const [indices, setIndices] = useState<IndexQuote[]>(cached?.indices ?? []);
-  const [board, setBoard] = useState<MarketGroup[]>(cached?.board ?? []);
+    const [board] = useState<MarketGroup[]>(cached?.board ?? []);
   const [trends, setTrends] = useState<Record<string, number[]>>(cached?.trends ?? {});
   // Cleared the moment anything fresh lands, so the age note never outlives
   // the figures it describes.
