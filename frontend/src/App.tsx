@@ -10,6 +10,8 @@ import { useAccount } from "./useAccount";
 import { useTheme } from "./useTheme";
 import { ThemePicker } from "./components/ThemePicker";
 import "./design.css";
+import { Observatory } from "./components/Observatory";
+import "./observatory.css";
 
 type Tab = "dashboard" | "comparison" | "journal" | "fed";
 
@@ -123,7 +125,7 @@ function App() {
             rather than stranding the reader on the error screen. */}
         <main id="main-content" tabIndex={-1} key={identity}>
           <ErrorBoundary key={tab}>
-            {tab === "dashboard" && <DashboardPage />}
+            {tab === "dashboard" && <><Observatory /><div id="research-dashboard"><DashboardPage /></div></>}
             {tab === "comparison" && <ComparisonPage />}
             {tab === "journal" && <JournalPage />}
             {tab === "fed" && <FedTrackerPage />}

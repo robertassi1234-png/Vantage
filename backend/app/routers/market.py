@@ -103,6 +103,13 @@ def provider_status() -> dict:
         "order": market_data._order(),
         "fundamentals_order": market_data._fundamentals_order(),
         "healthy": len(usable),
+        "cache_policy": {
+            "version": 1,
+            "quote_seconds": 300,
+            "history_seconds": 43200,
+            "search_seconds": 86400,
+            "fundamentals_refresh_floor_seconds": 3600,
+        },
     }
 
 

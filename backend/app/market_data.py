@@ -31,6 +31,8 @@ from app.finnhub_client import FinnhubError
 from app.stooq_client import StooqError
 from app.twelvedata_client import TwelveDataError
 from app.yahoo_client import YahooError
+from app import db
+from app.request_cache import cached_call, lock_for
 
 log = logging.getLogger(__name__)
 
@@ -165,23 +167,45 @@ async def _first_success(operation: str, call, *args, **kwargs):
 
 
 async def fetch_quotes(symbols: list[str]) -> list[dict]:
-    if not symbols:
+    wanted = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))
+    if not wanted:
         return []
-    return await _first_success("quotes", "fetch_quotes", symbols)
+    # Per-symbol caching lets watchlists, indices, positions and alerts reuse
+    # prices even when they request different combinations of the same stocks.
+    async with lock_for("upstream:quotes"):
+        found = {}
+        for symbol in wanted:
+            value = db.get_market_cache(f"upstream:quote:{symbol}", 5 * 60)
+            if value is not None:
+                found[symbol] = value
+        missing = [symbol for symbol in wanted if symbol not in found]
+        if missing:
+            quotes = await _first_success("quotes", "fetch_quotes", missing)
+            for quote in quotes:
+                symbol = quote.get("symbol")
+                if symbol in missing and quote.get("price") is not None:
+                    db.set_market_cache(f"upstream:quote:{symbol}", quote)
+                    found[symbol] = quote
+        return [found[symbol] for symbol in wanted if symbol in found]
 
 
 async def fetch_history(symbol: str, range_key: str = "1Y") -> list[dict]:
-    return await _first_success("history", "fetch_history", symbol, range_key)
+    symbol, range_key = symbol.strip().upper(), range_key.upper()
+    return await cached_call("history", [symbol, range_key], 12 * 3600,
+                             lambda: _first_success("history", "fetch_history", symbol, range_key))
 
 
 async def search_symbols(query: str, limit: int = 8) -> list[dict]:
     if not query.strip():
         return []
-    return await _first_success("search", "search_symbols", query, limit)
+    query = query.strip()
+    return await cached_call("search", [query.lower(), limit], 24 * 3600,
+                             lambda: _first_success("search", "search_symbols", query, limit))
 
 
 async def fetch_peers(symbol: str, limit: int = 6) -> list[str]:
-    return await _first_success("peers", "fetch_peers", symbol, limit)
+    return await cached_call("peers", [symbol.upper(), limit], 24 * 3600,
+                             lambda: _first_success("peers", "fetch_peers", symbol, limit))
 
 
 # Yahoo and Stooq have no fundamentals endpoint, so this is its own order.
@@ -197,6 +221,11 @@ def _fundamentals_order() -> list[str]:
 
 
 async def fetch_fundamentals(ticker: str) -> dict:
+    return await cached_call("fundamentals", ticker.upper(), 3600,
+                             lambda: _fetch_fundamentals(ticker))
+
+
+async def _fetch_fundamentals(ticker: str) -> dict:
     """Fundamentals for one ticker, from whichever provider still answers."""
     failures: list[tuple[str, str]] = []
     benched: list[str] = []

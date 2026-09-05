@@ -42,6 +42,9 @@ export function ProviderStatus({ defaultOpen = false }: { defaultOpen?: boolean 
       </div>
 
       {error && <p className="notice-line">{error}</p>}
+      <p className="provider-summary">API saver: quotes are shared for 5 minutes, daily charts for 12 hours,
+        and company searches for 24 hours. Repeated refreshes reuse recent provider results.
+        Prices are snapshots, not a live trading feed.</p>
       {!status && !error && <p className="notice-line">Checking…</p>}
 
       {status && (

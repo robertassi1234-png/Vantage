@@ -142,8 +142,10 @@ class TestTheChainUsesIt:
                  error=YahooError("rate limit reached (250 calls/day)"))
         counting(monkeypatch, fmp_client, "fetch_quotes", returns=[{"symbol": "AAPL"}])
 
-        assert await market_data.fetch_quotes(["AAPL"]) == [{"symbol": "AAPL"}]
-        assert await market_data.fetch_quotes(["MSFT"]) == [{"symbol": "AAPL"}]
+        # Test provider routing directly; the quote cache independently rejects
+        # missing prices and symbols that do not match the request.
+        assert await market_data._first_success("quotes", "fetch_quotes", ["AAPL"]) == [{"symbol": "AAPL"}]
+        assert await market_data._first_success("quotes", "fetch_quotes", ["MSFT"]) == [{"symbol": "AAPL"}]
 
     async def test_a_benched_provider_is_used_again_once_it_recovers(
         self, monkeypatch, order
@@ -158,7 +160,7 @@ class TestTheChainUsesIt:
         monkeypatch.setattr(provider_health, "_now", lambda: later)
         counting(monkeypatch, yahoo_client, "fetch_quotes", returns=[{"symbol": "BACK"}])
 
-        assert await market_data.fetch_quotes(["AAPL"]) == [{"symbol": "BACK"}]
+        assert await market_data._first_success("quotes", "fetch_quotes", ["AAPL"]) == [{"symbol": "BACK"}]
         assert len(yahoo_calls) == 1
 
     async def test_a_blip_does_not_take_a_provider_out_of_rotation(
