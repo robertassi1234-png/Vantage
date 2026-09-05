@@ -9,6 +9,23 @@ import type { Quote, WatchlistEntry } from "../types";
 const entries = (...tickers: string[]): WatchlistEntry[] =>
   tickers.map((ticker) => ({ ticker, added_at: "2026-01-01T00:00:00+00:00", note: null }));
 
+describe("Streamlined dashboard", () => {
+  it("keeps workspace maintenance off the watchlist", async () => {
+    stubApi();
+    render(<DashboardPage />);
+    await screen.findByRole("button", { name: "Refresh" });
+    expect(screen.queryByRole("button", { name: "Download backup" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your watchlist" })).toBeInTheDocument();
+  });
+  it("starts with alerts collapsed but keeps them available", async () => {
+    stubApi();
+    const { container } = render(<DashboardPage />);
+    await screen.findByRole("button", { name: "Refresh" });
+    expect(container.querySelector("details")?.open).toBe(false);
+    expect(screen.getByText(/Manage alerts/)).toBeInTheDocument();
+  });
+});
+
 const quote = (symbol: string, price = 300): Quote => ({
   symbol,
   name: `${symbol} Inc.`,
@@ -349,8 +366,8 @@ describe("DashboardPage explains missing prices", () => {
     render(<DashboardPage />);
 
     await screen.findByText(/rate limited across every provider/);
-    // Two: one beside the reason, one in its own section further down.
-    expect(screen.getAllByRole("button", { name: "Why is data missing?" })).toHaveLength(2);
+    // Contextual help stays by the error; general diagnostics live in Settings.
+    expect(screen.getAllByRole("button", { name: "Why is data missing?" })).toHaveLength(1);
   });
 
   it("keeps offering a retry while the server is only waking up", async () => {

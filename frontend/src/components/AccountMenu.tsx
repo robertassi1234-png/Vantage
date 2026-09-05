@@ -123,6 +123,7 @@ export function AccountMenu({
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
+        aria-label={label}
       >
         <span aria-hidden="true">{account.signed_in ? "●" : "○"}</span>
         <span className="account-label">{label}</span>

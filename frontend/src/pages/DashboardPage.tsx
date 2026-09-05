@@ -10,7 +10,6 @@ import { PortfolioSummary } from "../components/PortfolioSummary";
 import { ProviderStatus } from "../components/ProviderStatus";
 import { buildPortfolio } from "../positions";
 import { AlertsPanel } from "../components/AlertsPanel";
-import { BackupPanel } from "../components/BackupPanel";
 import {
   RANGES,
   type IndexQuote,
@@ -272,9 +271,9 @@ export function DashboardPage() {
     <section>
       <div className="page-header">
         <div>
-          <h2>Dashboard</h2>
+          <h2>Your watchlist</h2>
           <p className="page-subtitle">
-            Your watchlist, the major US indices, and price charts for anything you follow.
+            Follow companies. Open a chart. Keep your research in one place.
           </p>
         </div>
         <button className="btn" onClick={() => load(true)} disabled={loading}>
@@ -283,7 +282,7 @@ export function DashboardPage() {
         </button>
       </div>
 
-      <TickerSearch onSelect={handleAdd} disabled={loading} />
+      <div className="watchlist-search"><label className="search-caption">Add a company to your watchlist</label><TickerSearch onSelect={handleAdd} disabled={loading} /></div>
 
       {/* Figures from the last visit, shown while the server wakes. Marked
           with their age, because a stale price presented as live is worse
@@ -322,7 +321,7 @@ export function DashboardPage() {
       <h3 className="section-heading">
         Watchlist
         <span className="section-note">
-          Click a row for its chart, ⌄ for what you paid, or ✎ to note why you’re watching
+          {entries.length} {entries.length === 1 ? "company" : "companies"} · Select a company to view its chart
         </span>
       </h3>
       <WatchlistPanel
@@ -339,52 +338,12 @@ export function DashboardPage() {
         activeSymbol={chartSymbol}
       />
 
-      <h3 className="section-heading">
-        Market indices
-        <span className="section-note">The broad US market, for context</span>
-      </h3>
-      {indices.length > 0 ? (
-        <MarketIndices indices={indices} onSelect={showChart} activeSymbol={chartSymbol} />
-      ) : (
-        <div className="empty-state">
-          <p>Index data unavailable right now.</p>
-        </div>
-      )}
-
-
-      <h3 className="section-heading">
-        Price alerts
-        <span className="section-note">
-          {account.email_delivery && account.signed_in
-            ? "Emailed to you when one triggers"
-            : "Checked whenever you open Vantage"}
-        </span>
-      </h3>
-      <AlertsPanel
-        alerts={alerts}
-        quotes={quotes}
-        onCreate={handleCreateAlert}
-        onDelete={handleDeleteAlert}
-        onAcknowledge={handleAcknowledgeAlert}
-      />
-
-      <h3 className="section-heading">
-        Data sources
-        <span className="section-note">Which providers are answering right now</span>
-      </h3>
-      <ProviderStatus />
-
-      <h3 className="section-heading">
-        Backup
-        <span className="section-note">Move your lists between devices</span>
-      </h3>
-      <BackupPanel />
-
       {chartSymbol && (
-        <>
+        <section className="selected-chart" aria-label={`${chartLabel} price chart`}>
           <h3 className="section-heading">
             {chartLabel}
             <span className="section-note">{chartSymbol}</span>
+            <button className="link-btn close-chart" onClick={() => setChartSymbol(null)}>Close chart</button>
           </h3>
 
           <div className="chart-card">
@@ -408,8 +367,42 @@ export function DashboardPage() {
               </div>
             )}
           </div>
-        </>
+        </section>
       )}
+
+      <h3 className="section-heading">
+        Market indices
+        <span className="section-note">The broad US market, for context</span>
+      </h3>
+      {indices.length > 0 ? (
+        <MarketIndices indices={indices} onSelect={showChart} activeSymbol={chartSymbol} />
+      ) : (
+        <div className="empty-state">
+          <p>Index data unavailable right now.</p>
+        </div>
+      )}
+
+
+      <details className="workspace-disclosure">
+        <summary>Price alerts <span>{alerts.length} saved · Manage alerts</span></summary>
+      <h3 className="section-heading">
+        Alert notifications
+        <span className="section-note">
+          {account.email_delivery && account.signed_in
+            ? "Emailed to you when one triggers"
+            : "Checked whenever you open Vantage"}
+        </span>
+      </h3>
+      <AlertsPanel
+        alerts={alerts}
+        quotes={quotes}
+        onCreate={handleCreateAlert}
+        onDelete={handleDeleteAlert}
+        onAcknowledge={handleAcknowledgeAlert}
+      />
+      </details>
+
+
     </section>
   );
 }

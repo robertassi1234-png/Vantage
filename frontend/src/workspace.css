@@ -1,0 +1,53 @@
+/* Task-first workspace: persistent navigation and a quieter reading surface. */
+.workspace-app .app-header { backdrop-filter: none; -webkit-backdrop-filter: none; }
+.app.workspace-app { max-width: 1480px; padding: 36px 48px 24px 252px; }
+.workspace-app .app-header { position: fixed; inset: 0 auto 0 0; width: 212px; padding: 32px 18px; margin: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 38px; background: var(--surface); border-right: 1px solid var(--border); border-bottom: none; z-index: 70; }
+.workspace-app .brand { padding: 0 8px; }
+.workspace-app .brand-caption { display: none; }
+.workspace-app .brand-mark { width: 30px; height: 30px; border-radius: 9px; }
+.workspace-app .header-actions { display: flex; flex-direction: column; align-items: stretch; gap: 16px; flex: 1; }
+.workspace-app .header-actions nav { position: static; display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 100%; padding: 0; background: transparent; border: none; border-radius: 0; margin-bottom: auto; }
+.workspace-app .app-header nav button { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; padding: 12px; font-size: .85rem; border-radius: 9px; }
+.nav-symbol { font-size: 1.2rem; width: 20px; text-align: center; opacity: .8; }
+.workspace-app .app-header nav button.active { box-shadow: none; font-weight: 650; }
+.workspace-app .appearance-button { width: 100%; justify-content: center; }
+.workspace-app .appearance-panel { top: auto; bottom: 0; left: calc(100% + 24px); right: auto; }
+.workspace-app .account-panel { top: auto; bottom: 0; left: calc(100% + 24px); right: auto; max-height: calc(100dvh - 110px); overflow-y: auto; }
+.workspace-app .page-header { background: none; padding: 0 0 24px; margin: 0 0 24px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; align-items: center; }
+.workspace-app .page-header h2 { font-size: 1.85rem; letter-spacing: -.045em; margin-bottom: 8px; }
+.workspace-app .page-subtitle { font-size: .85rem; line-height: 1.6; }
+.workspace-app .section-heading { margin-top: 28px; margin-bottom: 14px; font-size: 1rem; }
+.workspace-app .section-note { font-size: .75rem; font-weight: 400; }
+.search-caption { display: block; font-size: .78rem; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.workspace-app .ticker-search { background: transparent; border: none; padding: 0; border-radius: 0; margin-bottom: 20px; }
+.workspace-app .search-field { flex: 1; max-width: none; }
+.workspace-app .search-field input { background: var(--surface); }
+.workspace-app .empty-state { padding: 28px 20px; border-style: solid; border-radius: 12px; }
+.workspace-app .index-tile { padding: 16px; border-radius: 12px; box-shadow: none; }
+.workspace-app .index-value { font-size: 1.4rem; }
+.workspace-app .index-blurb { display: none; }
+.workspace-app .index-grid { gap: 12px; }
+.workspace-app .portfolio-strip { border-radius: 12px; padding: 18px; background: var(--surface); }
+.selected-chart { padding: 0 20px 20px; margin-top: 20px; border: 1px solid var(--accent); border-radius: 14px; background: var(--surface); }
+.selected-chart .close-chart { margin-left: auto; font-size: .75rem; }
+.workspace-disclosure { margin-top: 28px; padding: 18px 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.workspace-disclosure summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+.workspace-disclosure summary span { margin-left: 12px; font-size: .75rem; color: var(--muted); font-weight: 400; }
+.settings-card { border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; background: var(--surface); }
+.settings-card h3 { margin: 0 0 8px; font-size: 1rem; }
+.settings-card > p { color: var(--muted); font-size: .85rem; line-height: 1.6; margin-bottom: 20px; }
+.workspace-app .app-footer { font-size: .7rem; opacity: .8; margin-top: 40px; }
+@media (max-width: 900px) {
+  .app.workspace-app { padding: 100px 20px 95px; }
+  .workspace-app .app-header { inset: 0 0 auto; width: auto; height: 76px; padding: 14px 20px; flex-direction: row; align-items: center; justify-content: space-between; border-right: none; border-bottom: 1px solid var(--border); gap: 12px; }
+  .workspace-app .header-actions { flex-direction: row; flex: 0; align-items: center; gap: 10px; }
+  .workspace-app .header-actions nav { position: fixed; inset: auto 0 0; width: auto; margin: 0; padding: 8px 8px max(8px, env(safe-area-inset-bottom)); flex-direction: row; gap: 2px; background: var(--surface); border-top: 1px solid var(--border); }
+  .workspace-app .app-header nav button { flex-direction: column; justify-content: center; gap: 2px; padding: 6px 2px; font-size: .65rem; }
+  .workspace-app .appearance-panel { left: auto; right: 0; bottom: auto; top: calc(100% + 14px); }
+  .workspace-app .account-panel { position: fixed; left: auto; right: 16px; bottom: auto; top: 82px; max-width: calc(100vw - 32px); }
+  .workspace-app .page-header { gap: 12px; }
+  .workspace-app .page-header h2 { font-size: 1.6rem; }
+  .workspace-app .brand { padding: 0; }
+  .workspace-app .index-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) { .workspace-app .section-heading { align-items: flex-start; } .workspace-disclosure summary span { display: block; margin: 8px 0 0; } .settings-card { padding: 18px; } }
