@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 
-export type Theme = "system" | "light" | "dark";
+export type Theme = "system" | "light" | "dark" | "midnight" | "ocean" | "forest" | "paper";
 
 const STORAGE_KEY = "vantage.theme";
-export const THEMES: Theme[] = ["system", "light", "dark"];
+export const THEMES: Theme[] = ["system", "light", "dark", "midnight", "ocean", "forest", "paper"];
 
 function readStored(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+    if (THEMES.includes(stored as Theme)) return stored as Theme;
   } catch {
     /* storage unavailable; fall through to the system default */
   }

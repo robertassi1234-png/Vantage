@@ -7,7 +7,9 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { FedTrackerPage } from "./pages/FedTrackerPage";
 import { JournalPage } from "./pages/JournalPage";
 import { useAccount } from "./useAccount";
-import { THEMES, useTheme, type Theme } from "./useTheme";
+import { useTheme } from "./useTheme";
+import { ThemePicker } from "./components/ThemePicker";
+import "./design.css";
 
 type Tab = "dashboard" | "comparison" | "journal" | "fed";
 
@@ -20,17 +22,6 @@ const TABS: { id: Tab; label: string }[] = [
 
 const TAB_STORAGE_KEY = "vantage.tab";
 
-const THEME_LABEL: Record<Theme, string> = {
-  system: "Auto",
-  light: "Light",
-  dark: "Dark",
-};
-
-const THEME_ICON: Record<Theme, string> = {
-  system: "◐",
-  light: "☀",
-  dark: "☾",
-};
 
 /**
  * The token from an emailed sign-in link.
@@ -92,20 +83,17 @@ function App() {
     }
   }, [tab]);
 
-  function cycleTheme() {
-    setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
-  }
-
   return (
     <div className="app">
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <header className="app-header">
         <div className="brand">
           <img src="/favicon.svg" alt="" className="brand-mark" />
-          <h1>Vantage</h1>
+          <div><h1>Vantage</h1><span className="brand-caption">A clearer view.</span></div>
         </div>
 
         <div className="header-actions">
-          <nav>
+          <nav aria-label="Main navigation">
             {TABS.map((t) => (
               <button
                 key={t.id}
@@ -126,21 +114,14 @@ function App() {
             onTokenHandled={handleTokenHandled}
           />
 
-          <button
-            className="theme-toggle"
-            onClick={cycleTheme}
-            title={`Theme: ${THEME_LABEL[theme]} — click to change`}
-            aria-label={`Theme: ${THEME_LABEL[theme]}. Click to change.`}
-          >
-            <span aria-hidden="true">{THEME_ICON[theme]}</span>
-          </button>
+          <ThemePicker theme={theme} onChange={setTheme} />
         </div>
       </header>
 
       <AccountProvider value={account}>
         {/* Keyed by tab as well as identity so switching tabs clears a crash
             rather than stranding the reader on the error screen. */}
-        <main key={identity}>
+        <main id="main-content" tabIndex={-1} key={identity}>
           <ErrorBoundary key={tab}>
             {tab === "dashboard" && <DashboardPage />}
             {tab === "comparison" && <ComparisonPage />}
