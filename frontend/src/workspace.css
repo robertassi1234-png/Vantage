@@ -51,3 +51,122 @@
   .workspace-app .index-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 480px) { .workspace-app .section-heading { align-items: flex-start; } .workspace-disclosure summary span { display: block; margin: 8px 0 0; } .settings-card { padding: 18px; } }
+
+/* PRECISION / visual treatment only. No geometry, order, or spacing changes. */
+:root:not([data-theme="light"]):not([data-theme="paper"]) {
+  color-scheme: dark;
+  --bg: #08090e;
+  --surface: #141620;
+  --surface-raised: #1d202d;
+  --surface-2: #242838;
+  --border: #303447;
+  --border-soft: #232738;
+  --divider: #c8d0ff10;
+  --text: #f0f1f8;
+  --muted: #a4aac0;
+  --muted-2: #8992ac;
+  --accent: #b696ff;
+  --accent-hover: #cfbaff;
+  --accent-soft: #9b68ff1f;
+  --accent-contrast: #fff;
+  --dovish: #58e6b7;
+  --hawkish: #ff788f;
+  --dovish-soft: #58e6b714;
+  --hawkish-soft: #ff788f14;
+  --shadow-sm: 0 2px 4px #0005, 0 10px 24px -10px #000b;
+  --shadow-md: 0 4px 8px #0006, 0 18px 40px -12px #000c;
+  --shadow-lg: 0 8px 16px #0008, 0 28px 70px #000a;
+}
+.workspace-app :is(.watch-price, .watch-delta, .index-value, .index-delta,
+  .portfolio-value, .portfolio-sub, .position-value, .position-return,
+  .range-low, .range-high, .numeric, .period-change-value, .tooltip-value,
+  .chart-axis-label, .lot-value, .alert-threshold, .valuation-value,
+  .position-stat dd, .num, input[type="number"]) {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: lining-nums tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -.055em;
+  font-weight: 500;
+}
+.workspace-app :is(.watch-price, .index-value, .portfolio-value) {
+  color: var(--text);
+  text-shadow: 0 0 18px #d6dfff12;
+}
+.workspace-app :is(.index-label, .portfolio-label, .section-heading,
+  .search-caption, .group-head, .th-label, .provider-head h4) {
+  font-variant-caps: all-small-caps;
+  letter-spacing: .12em;
+  font-weight: 600;
+  color: var(--muted);
+}
+.workspace-app .section-note { font-variant-caps: normal; letter-spacing: normal; color: var(--muted-2); }
+.workspace-app .page-header h2 { font-weight: 600; color: var(--text); }
+.workspace-app .app-header { background: linear-gradient(90deg, #ffffff03, transparent), var(--bg); border-color: var(--border-soft); box-shadow: 8px 0 32px #0002; }
+.workspace-app .app-header nav button { border-radius: 5px; color: var(--muted); }
+.workspace-app .app-header nav button.active {
+  color: #eee5ff;
+  background: linear-gradient(105deg, #9560ff55, #7848dc1a 80%);
+  box-shadow: inset 2px 0 0 #d4baff, inset 0 1px 0 #d1b6ff38, 0 0 22px #9861ff18;
+  text-shadow: 0 0 12px #bf97ff77;
+}
+.workspace-app .nav-symbol { font-family: "Arial", sans-serif; font-variant-emoji: text; }
+.workspace-app .btn:not(.btn-secondary) {
+  color: #fff;
+  background: linear-gradient(160deg, #ae7dff 0%, #8247e5 48%, #5c2dad 100%);
+  border-color: #c29eff66;
+  border-radius: 5px;
+  box-shadow: inset 0 1px 0 #f0deff80, inset 0 -1px 0 #21064466, 0 3px 8px #0006, 0 0 22px #9253ff38;
+  text-shadow: 0 1px 2px #360d7680;
+}
+.workspace-app .btn:not(.btn-secondary):hover:not(:disabled) { background: linear-gradient(160deg, #c399ff, #9257ed 48%, #7137cd); box-shadow: inset 0 1px 0 #fff9, 0 4px 12px #0006, 0 0 28px #a475ff55; }
+.workspace-app .btn:disabled { box-shadow: inset 0 1px 0 #ffffff18; filter: saturate(.35); }
+.workspace-app :is(button, a, input, select, textarea, summary):focus-visible {
+  outline-color: #d2b5ff;
+  box-shadow: 0 0 0 3px #a067ff30, 0 0 22px #ab72ff66;
+}
+.workspace-app :is(.index-tile, .watchlist, .table-wrap, .portfolio-strip,
+  .chart-card, .journal-entry, .journal-composer, .settings-card,
+  .workspace-disclosure, .empty-state, .selected-chart) {
+  background: linear-gradient(165deg, #ffffff05, transparent 55%), var(--surface);
+  border-color: var(--border-soft);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 0 #c9d3ff20, var(--shadow-sm);
+}
+.workspace-app :is(.position-detail, .note-editor, .provider-status, .backup-panel,
+  .legend-body, .chart-tooltip, .appearance-panel, .account-panel) {
+  background: linear-gradient(180deg, #ffffff04, transparent), var(--surface-raised);
+  border-color: var(--border);
+  border-radius: 5px;
+  box-shadow: inset 0 1px 0 #d2daff26, var(--shadow-md);
+}
+.workspace-app .search-field input { border-radius: 5px; background: var(--bg); border-color: var(--border); box-shadow: inset 0 2px 5px #0004, 0 1px 0 #ffffff06; }
+.workspace-app :is(.appearance-button, .account-trigger, .range-btn, .theme-option) { border-radius: 5px; }
+.workspace-app .index-tile:hover { background: linear-gradient(150deg, #ae8cff0e, transparent), var(--surface); box-shadow: inset 0 1px 0 #d8c4ff50, var(--shadow-md); }
+.workspace-app .watch-row:hover { background: #ac93ff08; }
+.workspace-app .sparkline-up { --tone: var(--dovish); }
+.workspace-app .sparkline-down { --tone: var(--hawkish); }
+.workspace-app .sparkline-flat { --tone: var(--muted); }
+.workspace-app .sparkline path:not(.sparkline-area) {
+  stroke-width: 2.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px var(--tone));
+}
+.workspace-app .sparkline .sparkline-area {
+  stroke: none;
+  fill: var(--tone);
+  opacity: .38;
+  mask-image: linear-gradient(to bottom, #000 0%, #0008 45%, transparent 100%);
+}
+.workspace-app .sparkline-dot { filter: drop-shadow(0 0 3px var(--tone)); }
+.workspace-app .chart-line { stroke-width: 2.5px; stroke-linecap: round; filter: drop-shadow(0 0 3px var(--tone)); }
+.workspace-app .chart-area { opacity: .22; mask-image: linear-gradient(#000, transparent); }
+.workspace-app .chart-grid { stroke: var(--border-soft); }
+.workspace-app .empty-state { background: repeating-linear-gradient(135deg, transparent 0 9px, #b6c3ff03 9px 10px), var(--surface); }
+.workspace-app .empty-mark {
+  border-radius: 3px;
+  background: linear-gradient(135deg, #a87aff20, transparent), var(--bg);
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 #c9afff55, inset 0 -1px 0 #7044bd55, 0 0 16px #a473ff14;
+}
+.workspace-app .empty-title { font-weight: 500; letter-spacing: -.025em; }
