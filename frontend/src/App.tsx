@@ -92,19 +92,19 @@ function App() {
       <header className="app-header">
         <div className="brand">
           <img src="/favicon.svg" alt="" className="brand-mark" />
-          <div><h1>Vantage</h1><span className="brand-caption">A clearer view.</span></div>
+          <div><h1>Vantage</h1><span className="brand-caption">RESEARCH TERMINAL</span></div>
         </div>
 
         <div className="header-actions">
           <nav aria-label="Main navigation">
-            {TABS.map((t) => (
+            {TABS.map((t, index) => (
               <button
                 key={t.id}
                 className={tab === t.id ? "active" : ""}
                 onClick={() => { setTab(t.id); window.scrollTo(0, 0); }}
                 aria-current={tab === t.id ? "page" : undefined}
               >
-                <span className="nav-symbol" aria-hidden="true">{({ dashboard: "◫", comparison: "⇄", journal: "≡", fed: "◎", settings: "⚙" })[t.id]}</span>{t.label}
+                <span className="nav-index" aria-hidden="true">0{index + 1}</span><span>{t.label}</span>
               </button>
             ))}
           </nav>
@@ -125,6 +125,10 @@ function App() {
         {/* Keyed by tab as well as identity so switching tabs clears a crash
             rather than stranding the reader on the error screen. */}
         <main id="main-content" tabIndex={-1} key={identity}>
+          <div className="workspace-topline" aria-hidden="true">
+            <span>VANTAGE / {TABS.find((t) => t.id === tab)?.label.toUpperCase()}</span>
+            <span>PERSONAL RESEARCH DESK</span>
+          </div>
           <ErrorBoundary key={tab}>
             {tab === "dashboard" && <DashboardPage />}
             {tab === "comparison" && <ComparisonPage />}
